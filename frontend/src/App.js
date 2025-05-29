@@ -6,6 +6,400 @@ import axios from "axios";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
+// Admin Context
+const AdminContext = React.createContext();
+
+// Admin Login Component
+const AdminLogin = ({ onLogin }) => {
+  const [token, setToken] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    try {
+      const response = await axios.post(`${API}/admin/login`, null, {
+        params: { token }
+      });
+      
+      if (response.data.success) {
+        localStorage.setItem('adminToken', token);
+        onLogin(token);
+      }
+    } catch (error) {
+      alert('Invalid admin credentials');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-blue-900 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Admin Login</h1>
+          <p className="text-gray-600">Pet Tag System Administration</p>
+        </div>
+        
+        <form onSubmit={handleLogin}>
+          <div className="mb-6">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Admin Token</label>
+            <input
+              type="password"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Enter admin token"
+              required
+            />
+          </div>
+          
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition duration-200 font-semibold"
+          >
+            {loading ? 'Logging in...' : 'Login'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// Admin Dashboard Component
+const AdminDashboard = ({ token }) => {
+  const [stats, setStats] = useState(null);
+  const [pets, setPets] = useState([]);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchStats();
+    fetchPets();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/stats?token=${token}`);
+      setStats(response.data);
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    }
+  };
+
+  const fetchPets = async () => {
+    try {
+      const response = await axios.get(`${API}/admin/pets?token=${token}`);
+      setPets(response.data);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching pets:', error);
+      setLoading(false);
+    }
+  };
+
+  const generateBillingCSV = async () => {
+    try {
+      const response = await axios.post(`${API}/admin/billing/generate-csv?token=${token}`);
+      if (response.data.success) {
+        alert(`Billing CSV generated successfully!\n\nFile: ${response.data.filename}\nTotal Amount: R${response.data.total_amount}\nCustomers: ${response.data.customer_count}`);
+        
+        // Download the file
+        const downloadUrl = `${BACKEND_URL}${response.data.download_url}?token=${token}`;
+        window.open(downloadUrl, '_blank');
+      }
+    } catch (error) {
+      alert('Error generating billing CSV: ' + error.response?.data?.detail);
+    }
+  };
+
+  const updatePaymentStatus = async (petId, status) => {
+    try {
+      await axios.post(`${API}/admin/pets/update-payment-status?token=${token}`, {
+        pet_id: petId,
+        status: status
+      });
+      fetchPets();
+      fetchStats();
+      alert(`Payment status updated to ${status}`);
+    } catch (error) {
+      alert('Error updating payment status');
+    }
+  };
+
+  const updateTagStatus = async (petId, status) => {
+    try {
+      await axios.post(`${API}/admin/tags/update-status?token=${token}`, {
+        pet_id: petId,
+        status: status
+      });
+      fetchPets();
+      fetchStats();
+      alert(`Tag status updated to ${status}`);
+    } catch (error) {
+      alert('Error updating tag status');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading admin dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="bg-white shadow">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-gray-800">Pet Tag Admin Dashboard</h1>
+            <button
+              onClick={() => {
+                localStorage.removeItem('adminToken');
+                window.location.reload();
+              }}
+              className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+            >
+              Logout
+            </button>
+          </div>
+          
+          <div className="flex space-x-4 mt-4">
+            {['overview', 'pets', 'billing', 'tags'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 rounded-lg font-medium ${
+                  activeTab === tab
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-4 py-8">
+        {activeTab === 'overview' && stats && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div className="bg-white p-6 rounded-xl shadow-lg">
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">Total Pets</h3>
+              <p className="text-3xl font-bold text-blue-600">{stats.total_pets}</p>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-lg">
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">Paid Up</h3>
+              <p className="text-3xl font-bold text-green-600">{stats.pets_paid}</p>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-lg">
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">In Arrears</h3>
+              <p className="text-3xl font-bold text-red-600">{stats.pets_in_arrears}</p>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-lg">
+              <h3 className="text-lg font-semibold text-gray-700 mb-2">Monthly Revenue</h3>
+              <p className="text-3xl font-bold text-purple-600">R{stats.monthly_revenue}</p>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'billing' && (
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-6">Billing Management</h2>
+            
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="border rounded-lg p-6">
+                <h3 className="text-lg font-semibold mb-4">Generate Monthly Billing</h3>
+                <p className="text-gray-600 mb-4">
+                  Generate CSV file for bank processing with all paid customers
+                </p>
+                <button
+                  onClick={generateBillingCSV}
+                  className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-semibold"
+                >
+                  Generate & Download CSV
+                </button>
+              </div>
+              
+              <div className="border rounded-lg p-6">
+                <h3 className="text-lg font-semibold mb-4">Import Payment Results</h3>
+                <p className="text-gray-600 mb-4">
+                  Upload CSV with payment results from bank
+                </p>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={async (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const formData = new FormData();
+                      formData.append('results_file', file);
+                      
+                      try {
+                        const response = await axios.post(
+                          `${API}/admin/payments/import-results?token=${token}`,
+                          formData,
+                          { headers: { 'Content-Type': 'multipart/form-data' } }
+                        );
+                        alert(response.data.message);
+                        fetchPets();
+                        fetchStats();
+                      } catch (error) {
+                        alert('Error importing results: ' + error.response?.data?.detail);
+                      }
+                    }
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'pets' && (
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+            <div className="px-6 py-4 border-b">
+              <h2 className="text-xl font-bold text-gray-800">Pet Management</h2>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pet ID</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pet Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Owner</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tag Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {pets.map((pet) => (
+                    <tr key={pet.pet_id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
+                        {pet.pet_id}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {pet.name}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        <div>
+                          <div className="font-medium">{pet.owner.name}</div>
+                          <div className="text-gray-500">{pet.owner.mobile}</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                          pet.payment_status === 'paid' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {pet.payment_status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                          pet.tag_status === 'delivered' ? 'bg-green-100 text-green-800' :
+                          pet.tag_status === 'shipped' ? 'bg-blue-100 text-blue-800' :
+                          pet.tag_status === 'printed' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {pet.tag_status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
+                        <select
+                          onChange={(e) => updatePaymentStatus(pet.pet_id, e.target.value)}
+                          className="text-xs border rounded px-2 py-1"
+                          defaultValue=""
+                        >
+                          <option value="" disabled>Payment</option>
+                          <option value="paid">Mark Paid</option>
+                          <option value="arrears">Mark Arrears</option>
+                        </select>
+                        <select
+                          onChange={(e) => updateTagStatus(pet.pet_id, e.target.value)}
+                          className="text-xs border rounded px-2 py-1"
+                          defaultValue=""
+                        >
+                          <option value="" disabled>Tag Status</option>
+                          <option value="printed">Printed</option>
+                          <option value="shipped">Shipped</option>
+                          <option value="delivered">Delivered</option>
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'tags' && (
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-6">Tag Management</h2>
+            
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="border rounded-lg p-6">
+                <h3 className="text-lg font-semibold mb-4">Print Queue</h3>
+                <p className="text-gray-600 mb-4">
+                  {pets.filter(p => p.tag_status === 'ordered').length} tags need printing
+                </p>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {pets.filter(p => p.tag_status === 'ordered').map(pet => (
+                    <div key={pet.pet_id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                      <span className="font-mono text-sm">{pet.pet_id}</span>
+                      <span className="text-sm">{pet.name}</span>
+                      <button
+                        onClick={() => updateTagStatus(pet.pet_id, 'printed')}
+                        className="text-xs bg-blue-600 text-white px-2 py-1 rounded"
+                      >
+                        Mark Printed
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="border rounded-lg p-6">
+                <h3 className="text-lg font-semibold mb-4">Tag Status Summary</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span>Ordered:</span>
+                    <span className="font-semibold">{pets.filter(p => p.tag_status === 'ordered').length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Printed:</span>
+                    <span className="font-semibold">{pets.filter(p => p.tag_status === 'printed').length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Shipped:</span>
+                    <span className="font-semibold">{pets.filter(p => p.tag_status === 'shipped').length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Delivered:</span>
+                    <span className="font-semibold">{pets.filter(p => p.tag_status === 'delivered').length}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Pet Registration Form
 const Registration = () => {
   const [formData, setFormData] = useState({
@@ -425,17 +819,51 @@ const Home = () => {
           </div>
         </div>
         
-        <div className="text-center">
+        <div className="text-center space-y-4">
           <button 
             onClick={() => navigate('/register')}
             className="bg-gradient-to-r from-blue-600 to-green-600 text-white px-8 py-4 rounded-2xl text-lg font-semibold hover:from-blue-700 hover:to-green-700 transition duration-200 shadow-lg"
           >
             Register Your Pet Now
           </button>
+          
+          <div className="mt-8">
+            <button 
+              onClick={() => navigate('/admin')}
+              className="text-gray-500 hover:text-gray-700 text-sm underline"
+            >
+              Admin Login
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
+};
+
+// Admin Route Handler
+const AdminRoute = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [adminToken, setAdminToken] = useState(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem('adminToken');
+    if (token) {
+      setAdminToken(token);
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  const handleLogin = (token) => {
+    setAdminToken(token);
+    setIsAuthenticated(true);
+  };
+
+  if (!isAuthenticated) {
+    return <AdminLogin onLogin={handleLogin} />;
+  }
+
+  return <AdminDashboard token={adminToken} />;
 };
 
 function App() {
@@ -446,6 +874,7 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/register" element={<Registration />} />
           <Route path="/scan/:petId" element={<ScanResult />} />
+          <Route path="/admin" element={<AdminRoute />} />
         </Routes>
       </BrowserRouter>
     </div>
