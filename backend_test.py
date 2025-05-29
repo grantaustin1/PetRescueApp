@@ -619,6 +619,105 @@ def main():
     if not tester.test_update_payment_status():
         print("❌ Update payment status test failed")
     
+    # Test getting print queue
+    if not tester.test_get_print_queue():
+        print("❌ Get print queue test failed")
+    
+    # Test importing payment results
+    if not tester.test_import_payment_results():
+        print("❌ Import payment results test failed")
+    
+    # Test new tag management features
+    print("\n=== Testing Tag Management Features ===\n")
+    
+    # Test generating print report
+    if not tester.test_generate_print_report():
+        print("❌ Generate print report test failed")
+    
+    # Test creating manufacturing batch
+    if not tester.test_create_manufacturing_batch():
+        print("❌ Create manufacturing batch test failed")
+    else:
+        # Test getting manufacturing batches
+        if not tester.test_get_manufacturing_batches():
+            print("❌ Get manufacturing batches test failed")
+        
+        # Test updating manufacturing batch
+        if not tester.test_update_manufacturing_batch():
+            print("❌ Update manufacturing batch test failed")
+    
+    # Test creating shipping batch
+    if not tester.test_create_shipping_batch():
+        print("❌ Create shipping batch test failed")
+    else:
+        # Test getting shipping batches
+        if not tester.test_get_shipping_batches():
+            print("❌ Get shipping batches test failed")
+    
+    # Test bulk updating tag status
+    if not tester.test_bulk_update_tag_status():
+        print("❌ Bulk update tag status test failed")
+    
+    # Test creating tag replacement
+    if not tester.test_create_tag_replacement():
+        print("❌ Create tag replacement test failed")
+    else:
+        # Test getting tag replacements
+        if not tester.test_get_tag_replacements():
+            print("❌ Get tag replacements test failed")
+    
+    # Print results
+    print(f"\n📊 Tests passed: {tester.tests_passed}/{tester.tests_run}")
+    return 0 if tester.tests_passed == tester.tests_run else 1
+    
+    print(f"Testing Pet Tag API at: {backend_url}")
+    
+    # Initialize tester
+    tester = PetTagAPITester(backend_url)
+    
+    # Test basic connectivity
+    if not tester.test_root_endpoint():
+        print("❌ Basic API connectivity test failed, stopping tests")
+        return 1
+    
+    # Test pet registration
+    if not tester.test_pet_registration():
+        print("❌ Pet registration test failed, stopping tests")
+        return 1
+    
+    # Test QR code scanning
+    if not tester.test_qr_scan():
+        print("❌ QR code scanning test failed")
+        return 1
+    
+    # Test admin functionality
+    print("\n=== Testing Admin Functionality ===\n")
+    
+    # Test admin login
+    if not tester.test_admin_login():
+        print("❌ Admin login test failed, stopping admin tests")
+        return 1
+    
+    # Test admin stats
+    if not tester.test_admin_stats():
+        print("❌ Admin stats test failed")
+    
+    # Test getting all pets
+    if not tester.test_get_all_pets():
+        print("❌ Get all pets test failed")
+    
+    # Test generating billing CSV
+    if not tester.test_generate_billing_csv():
+        print("❌ Generate billing CSV test failed")
+    else:
+        # Test downloading billing CSV
+        if not tester.test_download_billing_csv():
+            print("❌ Download billing CSV test failed")
+    
+    # Test updating payment status
+    if not tester.test_update_payment_status():
+        print("❌ Update payment status test failed")
+    
     # Test updating tag status
     if not tester.test_update_tag_status():
         print("❌ Update tag status test failed")
