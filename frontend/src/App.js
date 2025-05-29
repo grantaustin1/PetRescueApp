@@ -2013,16 +2013,13 @@ const AdminRoute = () => {
 function App() {
   return (
     <div className="App">
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/register" element={<Registration />} />
-          <Route path="/scan/:petId" element={<ScanResult />} />
-          <Route path="/customer" element={<CustomerLogin />} />
-          <Route path="/customer/dashboard" element={<CustomerDashboard />} />
-          <Route path="/admin" element={<AdminRoute />} />
-        </Routes>
-      </BrowserRouter>
+      <Routes>
+        <Route path="/register" element={<Registration />} />
+        <Route path="/scan/:petId" element={<ScanResult />} />
+        <Route path="/customer" element={<CustomerLogin />} />
+        <Route path="/customer/dashboard" element={<CustomerDashboard />} />
+        <Route path="/admin" element={<AdminRoute />} />
+      </Routes>
     </div>
   );
 }
