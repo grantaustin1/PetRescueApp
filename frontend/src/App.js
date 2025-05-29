@@ -772,15 +772,43 @@ const AdminDashboard = ({ token }) => {
 
   const generateBillingCSV = async () => {
     try {
+      console.log('Generating billing CSV...');
       const response = await axios.post(`${API}/admin/billing/generate-csv?token=${token}`);
+      console.log('CSV Response:', response.data);
+      
       if (response.data.success) {
         alert(`Billing CSV generated successfully!\n\nFile: ${response.data.filename}\nTotal Amount: R${response.data.total_amount}\nCustomers: ${response.data.customer_count}`);
         
-        const downloadUrl = `${BACKEND_URL}${response.data.download_url}?token=${token}`;
-        window.open(downloadUrl, '_blank');
+        // Create download link and trigger download
+        const downloadUrl = `${BACKEND_URL}/billing/${response.data.filename}`;
+        console.log('Download URL:', downloadUrl);
+        
+        // Method 1: Try direct download
+        try {
+          const downloadResponse = await axios.get(downloadUrl, {
+            responseType: 'blob',
+          });
+          
+          // Create blob and download
+          const blob = new Blob([downloadResponse.data], { type: 'text/csv' });
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = response.data.filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          
+        } catch (downloadError) {
+          console.error('Blob download failed, trying window.open:', downloadError);
+          // Method 2: Fallback to window.open
+          window.open(downloadUrl, '_blank');
+        }
       }
     } catch (error) {
-      alert('Error generating billing CSV: ' + error.response?.data?.detail);
+      console.error('Error generating billing CSV:', error);
+      alert('Error generating billing CSV: ' + (error.response?.data?.detail || error.message));
     }
   };
 
