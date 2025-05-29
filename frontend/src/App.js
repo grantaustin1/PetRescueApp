@@ -842,19 +842,47 @@ const AdminDashboard = ({ token }) => {
 
   const generatePrintReport = async (petIds, jobName = '') => {
     try {
+      console.log('Generating print report...');
       const response = await axios.post(`${API}/admin/tags/generate-print-report?token=${token}`, {
         pet_ids: petIds,
         job_name: jobName || `Print Job ${new Date().toLocaleDateString()}`
       });
       
+      console.log('Print Report Response:', response.data);
+      
       if (response.data.success) {
         alert(`Print report generated successfully!\n\nFile: ${response.data.filename}\nPet Count: ${response.data.pet_count}`);
         
-        const downloadUrl = `${BACKEND_URL}${response.data.download_url}?token=${token}`;
-        window.open(downloadUrl, '_blank');
+        // Create download link and trigger download
+        const downloadUrl = `${BACKEND_URL}/reports/${response.data.filename}`;
+        console.log('Download URL:', downloadUrl);
+        
+        // Try direct download
+        try {
+          const downloadResponse = await axios.get(downloadUrl, {
+            responseType: 'blob',
+          });
+          
+          // Create blob and download
+          const blob = new Blob([downloadResponse.data], { type: 'application/pdf' });
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = response.data.filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+          
+        } catch (downloadError) {
+          console.error('Blob download failed, trying window.open:', downloadError);
+          // Fallback to window.open
+          window.open(downloadUrl, '_blank');
+        }
       }
     } catch (error) {
-      alert('Error generating print report: ' + error.response?.data?.detail);
+      console.error('Error generating print report:', error);
+      alert('Error generating print report: ' + (error.response?.data?.detail || error.message));
     }
   };
 
