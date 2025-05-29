@@ -3,6 +3,8 @@ import requests
 import os
 import sys
 import json
+import csv
+import io
 from datetime import datetime
 import time
 
@@ -14,8 +16,10 @@ class PetTagAPITester:
         self.tests_passed = 0
         self.pet_id = None
         self.qr_code_url = None
+        self.admin_token = "admin123"
+        self.csv_filename = None
 
-    def run_test(self, name, method, endpoint, expected_status, data=None, files=None, headers=None):
+    def run_test(self, name, method, endpoint, expected_status, data=None, files=None, headers=None, params=None):
         """Run a single API test"""
         url = f"{self.api_url}/{endpoint}"
         self.tests_run += 1
@@ -24,12 +28,12 @@ class PetTagAPITester:
         
         try:
             if method == 'GET':
-                response = requests.get(url, headers=headers)
+                response = requests.get(url, headers=headers, params=params)
             elif method == 'POST':
                 if files:
-                    response = requests.post(url, data=data, files=files, headers=headers)
+                    response = requests.post(url, data=data, files=files, headers=headers, params=params)
                 else:
-                    response = requests.post(url, json=data, headers=headers)
+                    response = requests.post(url, json=data, headers=headers, params=params)
 
             print(f"Status Code: {response.status_code}")
             
@@ -135,6 +139,221 @@ class PetTagAPITester:
             print(f"Pet Photo URL: {response.get('pet_photo_url')}")
             return True
         return False
+        
+    # Admin functionality tests
+    
+    def test_admin_login(self):
+        """Test admin login with token"""
+        success, response = self.run_test(
+            "Admin Login",
+            "POST",
+            "admin/login",
+            200,
+            params={"token": self.admin_token}
+        )
+        
+        if success and response.get('success'):
+            print(f"Admin login successful with token: {self.admin_token}")
+            return True
+        return False
+        
+    def test_admin_stats(self):
+        """Test admin dashboard statistics"""
+        success, response = self.run_test(
+            "Admin Stats",
+            "GET",
+            "admin/stats",
+            200,
+            params={"token": self.admin_token}
+        )
+        
+        if success:
+            print("Admin Stats:")
+            print(f"Total Pets: {response.get('total_pets')}")
+            print(f"Pets Paid: {response.get('pets_paid')}")
+            print(f"Pets in Arrears: {response.get('pets_in_arrears')}")
+            print(f"Tags to Print: {response.get('tags_to_print')}")
+            print(f"Tags Shipped: {response.get('tags_shipped')}")
+            print(f"Monthly Revenue: R{response.get('monthly_revenue')}")
+            return True
+        return False
+        
+    def test_get_all_pets(self):
+        """Test getting all pets for admin"""
+        success, response = self.run_test(
+            "Get All Pets",
+            "GET",
+            "admin/pets",
+            200,
+            params={"token": self.admin_token}
+        )
+        
+        if success and isinstance(response, list):
+            print(f"Retrieved {len(response)} pets")
+            return True
+        return False
+        
+    def test_generate_billing_csv(self):
+        """Test generating billing CSV"""
+        success, response = self.run_test(
+            "Generate Billing CSV",
+            "POST",
+            "admin/billing/generate-csv",
+            200,
+            params={"token": self.admin_token}
+        )
+        
+        if success and response.get('success'):
+            self.csv_filename = response.get('filename')
+            print(f"Generated billing CSV: {self.csv_filename}")
+            print(f"Total Amount: R{response.get('total_amount')}")
+            print(f"Customer Count: {response.get('customer_count')}")
+            print(f"Download URL: {response.get('download_url')}")
+            return True
+        return False
+        
+    def test_download_billing_csv(self):
+        """Test downloading billing CSV"""
+        if not self.csv_filename:
+            print("❌ Cannot test CSV download without a filename")
+            return False
+            
+        url = f"{self.base_url}/billing/{self.csv_filename}?token={self.admin_token}"
+        print(f"Downloading CSV from: {url}")
+        
+        try:
+            response = requests.get(url)
+            if response.status_code == 200:
+                self.tests_passed += 1
+                self.tests_run += 1
+                print("✅ CSV download successful")
+                
+                # Verify CSV format
+                csv_content = response.text
+                csv_reader = csv.reader(io.StringIO(csv_content))
+                rows = list(csv_reader)
+                
+                if len(rows) > 0 and rows[0] == ['Customer_ID', 'Account_Holder_Name', 'Account_Number', 'Branch_Code', 'Amount']:
+                    print("✅ CSV format is correct")
+                    return True
+                else:
+                    print("❌ CSV format is incorrect")
+                    return False
+            else:
+                self.tests_run += 1
+                print(f"❌ Failed to download CSV - Status: {response.status_code}")
+                return False
+        except Exception as e:
+            self.tests_run += 1
+            print(f"❌ Failed to download CSV - Error: {str(e)}")
+            return False
+            
+    def test_update_payment_status(self):
+        """Test updating payment status for a pet"""
+        if not self.pet_id:
+            print("❌ Cannot test payment status update without a pet ID")
+            return False
+            
+        success, response = self.run_test(
+            "Update Payment Status",
+            "POST",
+            "admin/pets/update-payment-status",
+            200,
+            data={"pet_id": self.pet_id, "status": "arrears"},
+            params={"token": self.admin_token}
+        )
+        
+        if success and response.get('success'):
+            print(f"Updated payment status to 'arrears' for pet {self.pet_id}")
+            
+            # Now test changing it back to paid
+            success2, response2 = self.run_test(
+                "Update Payment Status (back to paid)",
+                "POST",
+                "admin/pets/update-payment-status",
+                200,
+                data={"pet_id": self.pet_id, "status": "paid"},
+                params={"token": self.admin_token}
+            )
+            
+            if success2 and response2.get('success'):
+                print(f"Updated payment status back to 'paid' for pet {self.pet_id}")
+                return True
+            return False
+        return False
+        
+    def test_update_tag_status(self):
+        """Test updating tag status for a pet"""
+        if not self.pet_id:
+            print("❌ Cannot test tag status update without a pet ID")
+            return False
+            
+        # Test each status transition
+        statuses = ["printed", "shipped", "delivered"]
+        all_success = True
+        
+        for status in statuses:
+            success, response = self.run_test(
+                f"Update Tag Status to '{status}'",
+                "POST",
+                "admin/tags/update-status",
+                200,
+                data={"pet_id": self.pet_id, "status": status},
+                params={"token": self.admin_token}
+            )
+            
+            if success and response.get('success'):
+                print(f"Updated tag status to '{status}' for pet {self.pet_id}")
+            else:
+                all_success = False
+                break
+                
+        return all_success
+        
+    def test_get_print_queue(self):
+        """Test getting the print queue"""
+        success, response = self.run_test(
+            "Get Print Queue",
+            "GET",
+            "admin/tags/print-queue",
+            200,
+            params={"token": self.admin_token}
+        )
+        
+        if success and isinstance(response, list):
+            print(f"Print queue contains {len(response)} pets")
+            return True
+        return False
+        
+    def test_import_payment_results(self):
+        """Test importing payment results from CSV"""
+        # Create test CSV file
+        test_csv_path = "test_payment_results.csv"
+        with open(test_csv_path, "w", newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['Customer_ID', 'Status', 'Amount', 'Date'])
+            writer.writerow([self.pet_id, 'success', '2.00', datetime.now().strftime('%Y-%m-%d')])
+        
+        files = {
+            'results_file': ('test_payment_results.csv', open(test_csv_path, 'rb'), 'text/csv')
+        }
+        
+        success, response = self.run_test(
+            "Import Payment Results",
+            "POST",
+            "admin/payments/import-results",
+            200,
+            files=files,
+            params={"token": self.admin_token}
+        )
+        
+        # Clean up test CSV
+        os.remove(test_csv_path)
+        
+        if success and response.get('success'):
+            print(f"Successfully imported payment results: {response.get('message')}")
+            return True
+        return False
 
 def main():
     # Get the backend URL from environment variable or use default
@@ -159,6 +378,46 @@ def main():
     if not tester.test_qr_scan():
         print("❌ QR code scanning test failed")
         return 1
+    
+    # Test admin functionality
+    print("\n=== Testing Admin Functionality ===\n")
+    
+    # Test admin login
+    if not tester.test_admin_login():
+        print("❌ Admin login test failed, stopping admin tests")
+        return 1
+    
+    # Test admin stats
+    if not tester.test_admin_stats():
+        print("❌ Admin stats test failed")
+    
+    # Test getting all pets
+    if not tester.test_get_all_pets():
+        print("❌ Get all pets test failed")
+    
+    # Test generating billing CSV
+    if not tester.test_generate_billing_csv():
+        print("❌ Generate billing CSV test failed")
+    else:
+        # Test downloading billing CSV
+        if not tester.test_download_billing_csv():
+            print("❌ Download billing CSV test failed")
+    
+    # Test updating payment status
+    if not tester.test_update_payment_status():
+        print("❌ Update payment status test failed")
+    
+    # Test updating tag status
+    if not tester.test_update_tag_status():
+        print("❌ Update tag status test failed")
+    
+    # Test getting print queue
+    if not tester.test_get_print_queue():
+        print("❌ Get print queue test failed")
+    
+    # Test importing payment results
+    if not tester.test_import_payment_results():
+        print("❌ Import payment results test failed")
     
     # Print results
     print(f"\n📊 Tests passed: {tester.tests_passed}/{tester.tests_run}")
