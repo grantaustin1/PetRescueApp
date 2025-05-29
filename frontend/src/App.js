@@ -165,21 +165,27 @@ const CustomerDashboard = () => {
 
   const downloadQR = async (petId) => {
     try {
+      console.log('Downloading QR code for:', petId);
       const token = localStorage.getItem('customerToken');
       const response = await axios.get(`${API}/customer/download-qr/${petId}`, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob'
       });
       
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      // Create blob and download
+      const blob = new Blob([response.data], { type: 'image/png' });
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = `${petId}_qr_code.png`;
       document.body.appendChild(link);
       link.click();
-      link.remove();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
     } catch (error) {
-      alert('Error downloading QR code');
+      console.error('Error downloading QR code:', error);
+      alert('Error downloading QR code: ' + (error.response?.data?.detail || error.message));
     }
   };
 
