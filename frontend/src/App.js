@@ -228,6 +228,237 @@ const AdminDashboard = ({ token }) => {
     }
   };
 
+  // Tag Management Sub-Component
+  const TagManagementContent = ({ activeTab, pets, token, onUpdate }) => {
+    const [selectedPetIds, setSelectedPetIds] = useState([]);
+
+    const PrintQueueTab = () => {
+      const queuePets = pets.filter(p => p.tag_status === 'ordered');
+      
+      return (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold">Print Queue ({queuePets.length} pets)</h3>
+            <div className="space-x-2">
+              <button
+                onClick={() => {
+                  const selectedIds = selectedPetIds.length > 0 ? selectedPetIds : queuePets.map(p => p.pet_id);
+                  if (selectedIds.length > 0) {
+                    generatePrintReport(selectedIds);
+                  }
+                }}
+                disabled={queuePets.length === 0}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+              >
+                Generate Print Report
+              </button>
+              <button
+                onClick={() => {
+                  const selectedIds = selectedPetIds.length > 0 ? selectedPetIds : queuePets.map(p => p.pet_id);
+                  if (selectedIds.length > 0) {
+                    createManufacturingBatch(selectedIds);
+                  }
+                }}
+                disabled={queuePets.length === 0}
+                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:bg-gray-400"
+              >
+                Create Batch
+              </button>
+            </div>
+          </div>
+          
+          <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
+            {queuePets.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">No pets in print queue</p>
+            ) : (
+              queuePets.map(pet => (
+                <div key={pet.pet_id} className="flex items-center justify-between p-3 bg-white rounded-lg mb-2">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedPetIds.includes(pet.pet_id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedPetIds([...selectedPetIds, pet.pet_id]);
+                        } else {
+                          setSelectedPetIds(selectedPetIds.filter(id => id !== pet.pet_id));
+                        }
+                      }}
+                      className="h-4 w-4 text-blue-600"
+                    />
+                    <span className="font-mono text-sm font-medium">{pet.pet_id}</span>
+                    <span className="text-sm">{pet.name}</span>
+                    <span className="text-xs text-gray-500">{pet.owner.name}</span>
+                  </div>
+                  <button
+                    onClick={() => updateTagStatus(pet.pet_id, 'printed')}
+                    className="bg-blue-600 text-white px-3 py-1 rounded text-xs hover:bg-blue-700"
+                  >
+                    Mark Printed
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    const ManufacturingTab = () => {
+      const manufacturingPets = pets.filter(p => ['printed', 'manufactured'].includes(p.tag_status));
+      
+      return (
+        <div className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="border rounded-lg p-4">
+              <h4 className="font-semibold mb-3">Printed Tags ({pets.filter(p => p.tag_status === 'printed').length})</h4>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {pets.filter(p => p.tag_status === 'printed').map(pet => (
+                  <div key={pet.pet_id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                    <span className="font-mono text-sm">{pet.pet_id}</span>
+                    <button
+                      onClick={() => updateTagStatus(pet.pet_id, 'manufactured')}
+                      className="bg-purple-600 text-white px-2 py-1 rounded text-xs"
+                    >
+                      Mark Manufactured
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="border rounded-lg p-4">
+              <h4 className="font-semibold mb-3">Manufactured Tags ({pets.filter(p => p.tag_status === 'manufactured').length})</h4>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {pets.filter(p => p.tag_status === 'manufactured').map(pet => (
+                  <div key={pet.pet_id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                    <span className="font-mono text-sm">{pet.pet_id}</span>
+                    <button
+                      onClick={() => {
+                        const courier = prompt('Enter courier name:');
+                        const tracking = prompt('Enter tracking number (optional):') || '';
+                        if (courier) {
+                          createShippingBatch([pet.pet_id], courier, tracking);
+                        }
+                      }}
+                      className="bg-indigo-600 text-white px-2 py-1 rounded text-xs"
+                    >
+                      Ship
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const ShippingTab = () => {
+      const shippingPets = pets.filter(p => ['shipped'].includes(p.tag_status));
+      
+      return (
+        <div className="space-y-4">
+          <div className="border rounded-lg p-4">
+            <div className="flex justify-between items-center mb-4">
+              <h4 className="font-semibold">Shipped Tags ({shippingPets.length})</h4>
+              <button
+                onClick={() => {
+                  const selectedIds = shippingPets.map(p => p.pet_id);
+                  if (selectedIds.length > 0) {
+                    bulkUpdateTagStatus(selectedIds, 'delivered');
+                  }
+                }}
+                disabled={shippingPets.length === 0}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400"
+              >
+                Mark All Delivered
+              </button>
+            </div>
+            
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {shippingPets.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">No tags currently in shipping</p>
+              ) : (
+                shippingPets.map(pet => (
+                  <div key={pet.pet_id} className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                    <div>
+                      <span className="font-mono text-sm font-medium">{pet.pet_id}</span>
+                      <span className="text-sm ml-2">{pet.name}</span>
+                      {pet.shipping_tracking && (
+                        <span className="text-xs text-blue-600 ml-2">#{pet.shipping_tracking}</span>
+                      )}
+                    </div>
+                    <div className="space-x-2">
+                      <button
+                        onClick={() => updateTagStatus(pet.pet_id, 'delivered')}
+                        className="bg-green-600 text-white px-3 py-1 rounded text-xs"
+                      >
+                        Mark Delivered
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    const ReplacementsTab = () => {
+      return (
+        <div className="space-y-4">
+          <div className="border rounded-lg p-4">
+            <h4 className="font-semibold mb-4">Create Tag Replacement</h4>
+            <div className="space-y-3">
+              <input
+                type="text"
+                placeholder="Enter Pet ID for replacement"
+                className="w-full px-3 py-2 border rounded-lg"
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    const petId = e.target.value.trim();
+                    const reason = prompt('Reason for replacement (lost/damaged/stolen):');
+                    if (petId && reason) {
+                      createTagReplacement(petId, reason);
+                      e.target.value = '';
+                    }
+                  }
+                }}
+              />
+              <p className="text-sm text-gray-600">Press Enter after typing Pet ID</p>
+            </div>
+          </div>
+          
+          <div className="border rounded-lg p-4">
+            <h4 className="font-semibold mb-3">Recent Replacements</h4>
+            <div className="space-y-2">
+              {pets.filter(p => p.replacement_count > 0).slice(0, 5).map(pet => (
+                <div key={pet.pet_id} className="flex justify-between items-center p-2 bg-yellow-50 rounded">
+                  <div>
+                    <span className="font-mono text-sm">{pet.pet_id}</span>
+                    <span className="text-sm ml-2">{pet.name}</span>
+                    <span className="text-xs text-orange-600 ml-2">Replacement #{pet.replacement_count}</span>
+                  </div>
+                  <span className="text-xs text-gray-500">R25.00 fee</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    switch (activeTab) {
+      case 'print-queue': return <PrintQueueTab />;
+      case 'manufacturing': return <ManufacturingTab />;
+      case 'shipping': return <ShippingTab />;
+      case 'replacements': return <ReplacementsTab />;
+      default: return <PrintQueueTab />;
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
