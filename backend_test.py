@@ -85,12 +85,9 @@ class PetTagAPITester:
             "account_holder_name": "John Doe"
         }
         
-        # Convert to JSON string as expected by the API
-        pet_data_str = json.dumps(pet_data)
-        
         # Create multipart form data
         form_data = {
-            'pet_data': (None, pet_data_str, 'application/json')
+            'pet_data': json.dumps(pet_data)
         }
         
         files = {
