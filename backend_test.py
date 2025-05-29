@@ -18,6 +18,9 @@ class PetTagAPITester:
         self.qr_code_url = None
         self.admin_token = "admin123"
         self.csv_filename = None
+        self.manufacturing_batch_id = None
+        self.shipping_batch_id = None
+        self.replacement_pet_id = None
 
     def run_test(self, name, method, endpoint, expected_status, data=None, files=None, headers=None, params=None):
         """Run a single API test"""
