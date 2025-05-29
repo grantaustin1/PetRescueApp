@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Pet Tag is on the Way!</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 0;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .content {
+            padding: 30px;
+        }
+        .shipping-info {
+            background: #f0f9ff;
+            border: 1px solid #38bdf8;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .tracking-box {
+            background: #eff6ff;
+            border: 2px solid #3b82f6;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin: 25px 0;
+        }
+        .tracking-number {
+            font-family: 'Courier New', monospace;
+            font-size: 20px;
+            font-weight: bold;
+            color: #1d4ed8;
+            background: white;
+            padding: 10px 15px;
+            border-radius: 6px;
+            display: inline-block;
+            margin: 10px 0;
+        }
+        .footer {
+            background: #f9fafb;
+            padding: 25px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📦 Your Pet Tag is Shipped!</h1>
+            <p>{{ pet_name }}'s custom tag is on the way</p>
+        </div>
+        
+        <div class="content">
+            <p>Hello <strong>{{ owner_name }}</strong>,</p>
+            
+            <p>Exciting news! {{ pet_name }}'s custom pet tag has been manufactured and is now on its way to you.</p>
+            
+            <div class="shipping-info">
+                <h3>📋 Shipping Details</h3>
+                <p><strong>Pet Name:</strong> {{ pet_name }}</p>
+                <p><strong>Pet ID:</strong> {{ pet_id }}</p>
+                <p><strong>Courier:</strong> {{ courier }}</p>
+                <p><strong>Shipping Date:</strong> {{ shipping_date }}</p>
+                <p><strong>Estimated Delivery:</strong> {{ estimated_delivery }}</p>
+            </div>
+            
+            {% if tracking_number %}
+            <div class="tracking-box">
+                <h3>📍 Track Your Package</h3>
+                <p>Use this tracking number to monitor your delivery:</p>
+                <div class="tracking-number">{{ tracking_number }}</div>
+                <p style="font-size: 14px; color: #666;">Track on {{ courier }}'s website or contact them directly</p>
+            </div>
+            {% endif %}
+            
+            <div style="background: #f0fdf4; border: 1px solid #10b981; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                <h4 style="color: #065f46; margin: 0 0 10px 0;">📌 What to Expect:</h4>
+                <ul style="color: #047857;">
+                    <li>Durable, weather-resistant pet tag</li>
+                    <li>QR code printed directly on the tag</li>
+                    <li>{{ pet_name }}'s name and your contact details</li>
+                    <li>Easy attachment ring for collar</li>
+                </ul>
+            </div>
+            
+            <p><strong>Once you receive the tag:</strong></p>
+            <ol>
+                <li>Attach it securely to {{ pet_name }}'s collar</li>
+                <li>Test the QR code by scanning it with your phone</li>
+                <li>Keep the temporary printed QR code as backup</li>
+            </ol>
+            
+            <p>Thank you for being part of our pet safety community and supporting rescue centers with your monthly donation!</p>
+        </div>
+        
+        <div class="footer">
+            <p><strong>Pet Tag Registry</strong></p>
+            <p>Questions about your shipment? Contact: petrescuetag@gmail.com</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Reminder - Pet Tag Registry</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 0;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #f59e0b, #ef4444);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .content {
+            padding: 30px;
+        }
+        .alert-box {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #ef4444;
+        }
+        .pet-info {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .amount-due {
+            background: #fee2e2;
+            border: 2px solid #ef4444;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin: 25px 0;
+        }
+        .amount-due h3 {
+            color: #dc2626;
+            margin: 0 0 10px 0;
+            font-size: 24px;
+        }
+        .amount {
+            font-size: 36px;
+            font-weight: bold;
+            color: #dc2626;
+        }
+        .footer {
+            background: #f9fafb;
+            padding: 25px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💳 Payment Reminder</h1>
+            <p>Keep {{ pet_name }}'s protection active</p>
+        </div>
+        
+        <div class="content">
+            <p>Hello <strong>{{ owner_name }}</strong>,</p>
+            
+            <div class="alert-box">
+                <h3>⚠️ Payment Failed</h3>
+                <p>We were unable to process your monthly donation for <strong>{{ pet_name }}</strong> ({{ pet_id }}). Your pet's protection status is now in arrears.</p>
+            </div>
+            
+            <div class="pet-info">
+                <h4>Pet Details:</h4>
+                <p><strong>Name:</strong> {{ pet_name }}</p>
+                <p><strong>Pet ID:</strong> {{ pet_id }}</p>
+                <p><strong>Monthly Fee:</strong> R{{ monthly_fee }}</p>
+                <p><strong>Last Payment:</strong> {{ last_payment_date }}</p>
+            </div>
+            
+            <div class="amount-due">
+                <h3>Amount Due</h3>
+                <div class="amount">R{{ amount_due }}</div>
+                <p>Please ensure sufficient funds are available for next debit</p>
+            </div>
+            
+            <p><strong>Why This Payment Matters:</strong></p>
+            <ul>
+                <li>Keeps {{ pet_name }}'s QR code profile active</li>
+                <li>Continues supporting local rescue centers</li>
+                <li>Maintains your customer portal access</li>
+            </ul>
+            
+            <p>If you have any questions about your payment or need to update your banking details, please contact us immediately.</p>
+        </div>
+        
+        <div class="footer">
+            <p><strong>Pet Tag Registry</strong></p>
+            <p>Contact: petrescuetag@gmail.com</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pet Tag Registration Confirmation</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 0;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #3b82f6, #10b981);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 16px;
+        }
+        .content {
+            padding: 30px;
+        }
+        .pet-info {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #10b981;
+        }
+        .pet-info h3 {
+            margin: 0 0 15px 0;
+            color: #1f2937;
+            font-size: 20px;
+        }
+        .pet-detail {
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        .pet-detail strong {
+            color: #374151;
+        }
+        .qr-section {
+            text-align: center;
+            margin: 30px 0;
+            padding: 25px;
+            background: linear-gradient(135deg, #eff6ff, #f0fdf4);
+            border-radius: 12px;
+            border: 2px dashed #3b82f6;
+        }
+        .qr-section h3 {
+            color: #1f2937;
+            margin: 0 0 15px 0;
+            font-size: 22px;
+        }
+        .qr-code {
+            margin: 20px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            display: inline-block;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .pet-id {
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            font-weight: bold;
+            color: #3b82f6;
+            background: #eff6ff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            display: inline-block;
+            margin: 10px 0;
+        }
+        .instructions {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 25px 0;
+        }
+        .instructions h4 {
+            color: #92400e;
+            margin: 0 0 10px 0;
+            font-size: 18px;
+        }
+        .instructions ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin: 5px 0;
+            color: #78350f;
+        }
+        .footer {
+            background: #f9fafb;
+            padding: 25px;
+            text-align: center;
+            border-top: 1px solid #e5e7eb;
+        }
+        .footer p {
+            margin: 5px 0;
+            color: #6b7280;
+            font-size: 14px;
+        }
+        .button {
+            display: inline-block;
+            background: linear-gradient(135deg, #3b82f6, #10b981);
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .support-section {
+            background: #f0fdf4;
+            border: 1px solid #10b981;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .support-section h4 {
+            color: #065f46;
+            margin: 0 0 10px 0;
+        }
+        .support-section p {
+            color: #047857;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐾 Pet Tag Registration Successful!</h1>
+            <p>Your pet is now protected and helping rescue centers</p>
+        </div>
+        
+        <div class="content">
+            <p>Hello <strong>{{ owner_name }}</strong>,</p>
+            
+            <p>Great news! <strong>{{ pet_name }}</strong> has been successfully registered in our Pet Tag system. Your monthly R2 donation is now helping local rescue centers, and your pet has a digital safety net.</p>
+            
+            <div class="pet-info">
+                <h3>📋 Pet Registration Details</h3>
+                <div class="pet-detail">
+                    <span><strong>Pet Name:</strong></span>
+                    <span>{{ pet_name }}</span>
+                </div>
+                <div class="pet-detail">
+                    <span><strong>Breed:</strong></span>
+                    <span>{{ breed }}</span>
+                </div>
+                <div class="pet-detail">
+                    <span><strong>Pet ID:</strong></span>
+                    <span class="pet-id">{{ pet_id }}</span>
+                </div>
+                <div class="pet-detail">
+                    <span><strong>Registration Date:</strong></span>
+                    <span>{{ registration_date }}</span>
+                </div>
+            </div>
+            
+            <div class="qr-section">
+                <h3>📱 Your Pet's QR Code</h3>
+                <p>This QR code links to {{ pet_name }}'s profile. Anyone who finds your pet can scan it to contact you immediately.</p>
+                
+                <div class="qr-code">
+                    <img src="cid:qr_image" alt="QR Code for {{ pet_name }}" style="width: 200px; height: 200px;">
+                </div>
+                
+                <p><strong>Pet ID:</strong> <span class="pet-id">{{ pet_id }}</span></p>
+                <p style="font-size: 14px; color: #666;">Print this QR code and attach it to {{ pet_name }}'s collar as a backup until your physical tag arrives.</p>
+            </div>
+            
+            <div class="instructions">
+                <h4>📌 What Happens Next?</h4>
+                <ul>
+                    <li><strong>Physical Tag:</strong> Your custom pet tag with QR code will be manufactured and shipped to your address</li>
+                    <li><strong>Monthly Donation:</strong> R2.00 will be automatically debited monthly to support rescue centers</li>
+                    <li><strong>Customer Portal:</strong> Access your account anytime at our website using your email and Pet ID</li>
+                    <li><strong>Lost Pet Help:</strong> If {{ pet_name }} goes missing, anyone can scan the QR code to contact you instantly</li>
+                </ul>
+            </div>
+            
+            <div class="support-section">
+                <h4>💚 Thank You for Supporting Rescue Centers!</h4>
+                <p>Your R2/month donation helps fund local animal rescue operations</p>
+                <p>Together, we're making a difference for animals in need</p>
+            </div>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{{ customer_portal_url }}" class="button">Access Customer Portal</a>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p><strong>Pet Tag Registry</strong> - Keeping pets safe, supporting rescues</p>
+            <p>Contact us: petrescuetag@gmail.com</p>
+            <p>This email was sent to {{ owner_email }} regarding pet registration {{ pet_id }}</p>
+        </div>
+    </div>
+</body>
+</html>
