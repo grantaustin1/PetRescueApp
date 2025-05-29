@@ -6,7 +6,655 @@ import axios from "axios";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-// Admin Login Component
+// Customer Login Component
+const CustomerLogin = () => {
+  const [formData, setFormData] = useState({
+    email: '',
+    pet_id: ''
+  });
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    try {
+      const response = await axios.post(`${API}/customer/login`, formData);
+      
+      if (response.data.access_token) {
+        localStorage.setItem('customerToken', response.data.access_token);
+        navigate('/customer/dashboard');
+      }
+    } catch (error) {
+      alert('Invalid email or Pet ID. Please check your credentials.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+            </svg>
+          </div>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Customer Portal</h1>
+          <p className="text-gray-600">Access your pet's information</p>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({...formData, email: e.target.value})}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              placeholder="Enter your email"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Pet ID</label>
+            <input
+              type="text"
+              value={formData.pet_id}
+              onChange={(e) => setFormData({...formData, pet_id: e.target.value.toUpperCase()})}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 font-mono"
+              placeholder="e.g., PET000123"
+              required
+            />
+            <p className="text-sm text-gray-500 mt-1">Use any Pet ID from your registered pets</p>
+          </div>
+          
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition duration-200 font-semibold"
+          >
+            {loading ? 'Logging in...' : 'Access Portal'}
+          </button>
+        </form>
+        
+        <div className="mt-6 text-center">
+          <button 
+            onClick={() => navigate('/')}
+            className="text-gray-500 hover:text-gray-700 text-sm underline"
+          >
+            Back to Homepage
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Customer Dashboard Component
+const CustomerDashboard = () => {
+  const [profile, setProfile] = useState(null);
+  const [selectedPet, setSelectedPet] = useState(null);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [loading, setLoading] = useState(true);
+  const [editingPet, setEditingPet] = useState(null);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const token = localStorage.getItem('customerToken');
+    if (!token) {
+      navigate('/customer');
+      return;
+    }
+    fetchProfile();
+  }, [navigate]);
+
+  const fetchProfile = async () => {
+    try {
+      const token = localStorage.getItem('customerToken');
+      const response = await axios.get(`${API}/customer/profile`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setProfile(response.data);
+      if (response.data.pets.length > 0) {
+        setSelectedPet(response.data.pets[0]);
+      }
+    } catch (error) {
+      if (error.response?.status === 401) {
+        localStorage.removeItem('customerToken');
+        navigate('/customer');
+      } else {
+        alert('Error loading profile');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updatePet = async (petId, updateData) => {
+    try {
+      const token = localStorage.getItem('customerToken');
+      await axios.put(`${API}/customer/pet/${petId}`, updateData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert('Pet information updated successfully!');
+      fetchProfile();
+      setEditingPet(null);
+    } catch (error) {
+      alert('Error updating pet information');
+    }
+  };
+
+  const updateProfile = async (updateData) => {
+    try {
+      const token = localStorage.getItem('customerToken');
+      await axios.put(`${API}/customer/profile`, updateData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert('Profile updated successfully!');
+      fetchProfile();
+      setEditingProfile(false);
+    } catch (error) {
+      alert('Error updating profile');
+    }
+  };
+
+  const downloadQR = async (petId) => {
+    try {
+      const token = localStorage.getItem('customerToken');
+      const response = await axios.get(`${API}/customer/download-qr/${petId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${petId}_qr_code.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      alert('Error downloading QR code');
+    }
+  };
+
+  const requestReplacement = async (petId) => {
+    const reason = prompt('Reason for replacement (lost/damaged/stolen):');
+    if (!reason) return;
+    
+    try {
+      const token = localStorage.getItem('customerToken');
+      const response = await axios.post(`${API}/customer/request-replacement/${petId}?reason=${reason}`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert(`Replacement request submitted! Fee: R${response.data.replacement_fee}`);
+    } catch (error) {
+      alert('Error submitting replacement request');
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('customerToken');
+    navigate('/');
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your pet information...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <p className="text-gray-600">Unable to load profile</p>
+    </div>;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-800">My Pets Dashboard</h1>
+              <p className="text-gray-600">Welcome back! Manage your pet's information</p>
+            </div>
+            <div className="flex space-x-4">
+              <button
+                onClick={() => navigate('/')}
+                className="text-gray-600 hover:text-gray-800"
+              >
+                Homepage
+              </button>
+              <button
+                onClick={logout}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+          
+          {/* Navigation Tabs */}
+          <div className="flex space-x-4 mt-4">
+            {['overview', 'pets', 'profile', 'payments'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 rounded-lg font-medium ${
+                  activeTab === tab
+                    ? 'bg-green-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-4 py-8">
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="bg-white p-6 rounded-xl shadow-lg">
+                <h3 className="text-lg font-semibold text-gray-700 mb-2">Total Pets</h3>
+                <p className="text-3xl font-bold text-green-600">{profile.total_pets}</p>
+              </div>
+              <div className="bg-white p-6 rounded-xl shadow-lg">
+                <h3 className="text-lg font-semibold text-gray-700 mb-2">Active Payments</h3>
+                <p className="text-3xl font-bold text-blue-600">{profile.active_payments}</p>
+              </div>
+              <div className="bg-white p-6 rounded-xl shadow-lg">
+                <h3 className="text-lg font-semibold text-gray-700 mb-2">Monthly Donation</h3>
+                <p className="text-3xl font-bold text-purple-600">R{profile.total_donations}</p>
+              </div>
+              <div className="bg-white p-6 rounded-xl shadow-lg">
+                <h3 className="text-lg font-semibold text-gray-700 mb-2">Rescue Support</h3>
+                <p className="text-3xl font-bold text-orange-600">Active</p>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <h3 className="text-xl font-bold text-gray-800 mb-4">Quick Actions</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {profile.pets.map((pet) => (
+                  <div key={pet.pet_id} className="border rounded-lg p-4 hover:shadow-md transition">
+                    <div className="flex items-center space-x-4">
+                      {pet.photo_url && (
+                        <img 
+                          src={`${BACKEND_URL}${pet.photo_url}`} 
+                          alt={pet.name}
+                          className="w-16 h-16 object-cover rounded-full"
+                        />
+                      )}
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-800">{pet.name}</h4>
+                        <p className="text-sm text-gray-600">{pet.pet_id}</p>
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                          pet.payment_status === 'paid' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {pet.payment_status}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex space-x-2">
+                      <button
+                        onClick={() => downloadQR(pet.pet_id)}
+                        className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                      >
+                        Download QR
+                      </button>
+                      <button
+                        onClick={() => requestReplacement(pet.pet_id)}
+                        className="bg-orange-600 text-white px-3 py-1 rounded text-sm hover:bg-orange-700"
+                      >
+                        Replace Tag
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pets Management Tab */}
+        {activeTab === 'pets' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+              <div className="px-6 py-4 border-b">
+                <h2 className="text-xl font-bold text-gray-800">Pet Management</h2>
+              </div>
+              
+              <div className="p-6">
+                {profile.pets.map((pet) => (
+                  <div key={pet.pet_id} className="border rounded-lg p-6 mb-4 hover:shadow-md transition">
+                    <div className="flex justify-between items-start">
+                      <div className="flex space-x-6">
+                        {pet.photo_url && (
+                          <img 
+                            src={`${BACKEND_URL}${pet.photo_url}`} 
+                            alt={pet.name}
+                            className="w-24 h-24 object-cover rounded-lg"
+                          />
+                        )}
+                        <div className="flex-1">
+                          {editingPet === pet.pet_id ? (
+                            <EditPetForm 
+                              pet={pet} 
+                              onSave={(data) => updatePet(pet.pet_id, data)}
+                              onCancel={() => setEditingPet(null)}
+                            />
+                          ) : (
+                            <PetDetails 
+                              pet={pet} 
+                              onEdit={() => setEditingPet(pet.pet_id)}
+                              onDownloadQR={() => downloadQR(pet.pet_id)}
+                              onRequestReplacement={() => requestReplacement(pet.pet_id)}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Profile Tab */}
+        {activeTab === 'profile' && (
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-gray-800">Contact Information</h2>
+              <button
+                onClick={() => setEditingProfile(!editingProfile)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+              >
+                {editingProfile ? 'Cancel' : 'Edit Profile'}
+              </button>
+            </div>
+            
+            {editingProfile ? (
+              <EditProfileForm 
+                profile={profile.pets[0]?.owner}
+                onSave={updateProfile}
+                onCancel={() => setEditingProfile(false)}
+              />
+            ) : (
+              <ProfileDetails profile={profile.pets[0]?.owner} />
+            )}
+          </div>
+        )}
+
+        {/* Payments Tab */}
+        {activeTab === 'payments' && (
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-6">Payment Information</h2>
+            
+            <div className="space-y-4">
+              {profile.pets.map((pet) => (
+                <div key={pet.pet_id} className="border rounded-lg p-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h4 className="font-semibold text-gray-800">{pet.name} ({pet.pet_id})</h4>
+                      <p className="text-sm text-gray-600">Monthly Fee: R{pet.monthly_fee}</p>
+                      <p className="text-sm text-gray-600">
+                        Last Payment: {pet.last_payment ? new Date(pet.last_payment).toLocaleDateString() : 'Never'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`px-3 py-1 text-sm font-semibold rounded-full ${
+                        pet.payment_status === 'paid' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {pet.payment_status}
+                      </span>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Tag Status: {pet.tag_status}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
+              <h4 className="font-semibold text-green-800 mb-2">💚 Supporting Rescue Centers</h4>
+              <p className="text-green-700">
+                Your monthly donation of R{profile.total_donations} helps fund local animal rescue operations. 
+                Thank you for making a difference!
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Helper Components
+const PetDetails = ({ pet, onEdit, onDownloadQR, onRequestReplacement }) => (
+  <div>
+    <div className="flex justify-between items-start mb-4">
+      <div>
+        <h3 className="text-xl font-bold text-gray-800">{pet.name}</h3>
+        <p className="text-gray-600">{pet.breed} • {pet.pet_id}</p>
+      </div>
+      <button
+        onClick={onEdit}
+        className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
+      >
+        Edit Details
+      </button>
+    </div>
+    
+    {pet.medical_info && (
+      <div className="mb-3">
+        <h4 className="font-semibold text-gray-700">Medical Info:</h4>
+        <p className="text-gray-600">{pet.medical_info}</p>
+      </div>
+    )}
+    
+    {pet.instructions && (
+      <div className="mb-4">
+        <h4 className="font-semibold text-gray-700">Special Instructions:</h4>
+        <p className="text-gray-600">{pet.instructions}</p>
+      </div>
+    )}
+    
+    <div className="flex space-x-3">
+      <button
+        onClick={onDownloadQR}
+        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+      >
+        Download QR Code
+      </button>
+      <button
+        onClick={onRequestReplacement}
+        className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700"
+      >
+        Request Replacement
+      </button>
+    </div>
+  </div>
+);
+
+const EditPetForm = ({ pet, onSave, onCancel }) => {
+  const [formData, setFormData] = useState({
+    name: pet.name,
+    breed: pet.breed,
+    medical_info: pet.medical_info || '',
+    instructions: pet.instructions || ''
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave(formData);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">Pet Name</label>
+          <input
+            type="text"
+            value={formData.name}
+            onChange={(e) => setFormData({...formData, name: e.target.value})}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">Breed</label>
+          <input
+            type="text"
+            value={formData.breed}
+            onChange={(e) => setFormData({...formData, breed: e.target.value})}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+          />
+        </div>
+      </div>
+      
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-1">Medical Information</label>
+        <textarea
+          value={formData.medical_info}
+          onChange={(e) => setFormData({...formData, medical_info: e.target.value})}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+          rows="3"
+        />
+      </div>
+      
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-1">Special Instructions</label>
+        <textarea
+          value={formData.instructions}
+          onChange={(e) => setFormData({...formData, instructions: e.target.value})}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+          rows="3"
+        />
+      </div>
+      
+      <div className="flex space-x-3">
+        <button
+          type="submit"
+          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+        >
+          Save Changes
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+};
+
+const ProfileDetails = ({ profile }) => (
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div>
+      <h4 className="font-semibold text-gray-700 mb-2">Contact Details</h4>
+      <p className="text-gray-600 mb-1"><strong>Name:</strong> {profile?.name}</p>
+      <p className="text-gray-600 mb-1"><strong>Email:</strong> {profile?.email}</p>
+      <p className="text-gray-600 mb-1"><strong>Mobile:</strong> {profile?.mobile}</p>
+    </div>
+    <div>
+      <h4 className="font-semibold text-gray-700 mb-2">Address</h4>
+      <p className="text-gray-600">{profile?.address}</p>
+    </div>
+  </div>
+);
+
+const EditProfileForm = ({ profile, onSave, onCancel }) => {
+  const [formData, setFormData] = useState({
+    name: profile?.name || '',
+    mobile: profile?.mobile || '',
+    address: profile?.address || ''
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave(formData);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">Full Name</label>
+          <input
+            type="text"
+            value={formData.name}
+            onChange={(e) => setFormData({...formData, name: e.target.value})}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">Mobile Number</label>
+          <input
+            type="tel"
+            value={formData.mobile}
+            onChange={(e) => setFormData({...formData, mobile: e.target.value})}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+          />
+        </div>
+      </div>
+      
+      <div>
+        <label className="block text-sm font-semibold text-gray-700 mb-1">Address</label>
+        <textarea
+          value={formData.address}
+          onChange={(e) => setFormData({...formData, address: e.target.value})}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+          rows="3"
+        />
+      </div>
+      
+      <div className="flex space-x-3">
+        <button
+          type="submit"
+          className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+        >
+          Save Changes
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+};
+
+// Admin Dashboard Component (existing code with enhancements)
 const AdminLogin = ({ onLogin }) => {
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
@@ -65,7 +713,7 @@ const AdminLogin = ({ onLogin }) => {
   );
 };
 
-// Admin Dashboard Component
+// Enhanced Admin Dashboard with automation features
 const AdminDashboard = ({ token }) => {
   const [stats, setStats] = useState(null);
   const [pets, setPets] = useState([]);
@@ -99,13 +747,35 @@ const AdminDashboard = ({ token }) => {
     }
   };
 
+  const sendPaymentReminders = async () => {
+    try {
+      const response = await axios.post(`${API}/admin/automation/send-payment-reminders?token=${token}`);
+      alert(`Success! Sent ${response.data.reminders_sent} payment reminder emails.`);
+    } catch (error) {
+      alert('Error sending payment reminders');
+    }
+  };
+
+  const applyAnnualAdjustment = async () => {
+    const percentage = prompt('Enter annual fee adjustment percentage (e.g., 5 for 5%):');
+    if (!percentage || isNaN(percentage)) return;
+    
+    try {
+      const response = await axios.post(`${API}/admin/automation/annual-fee-adjustment?token=${token}&percentage=${percentage}`);
+      alert(`Success! Applied ${percentage}% increase to ${response.data.affected_pets} pets.`);
+      fetchStats();
+      fetchPets();
+    } catch (error) {
+      alert('Error applying fee adjustment');
+    }
+  };
+
   const generateBillingCSV = async () => {
     try {
       const response = await axios.post(`${API}/admin/billing/generate-csv?token=${token}`);
       if (response.data.success) {
         alert(`Billing CSV generated successfully!\n\nFile: ${response.data.filename}\nTotal Amount: R${response.data.total_amount}\nCustomers: ${response.data.customer_count}`);
         
-        // Download the file
         const downloadUrl = `${BACKEND_URL}${response.data.download_url}?token=${token}`;
         window.open(downloadUrl, '_blank');
       }
@@ -152,7 +822,6 @@ const AdminDashboard = ({ token }) => {
       if (response.data.success) {
         alert(`Print report generated successfully!\n\nFile: ${response.data.filename}\nPet Count: ${response.data.pet_count}`);
         
-        // Download the file
         const downloadUrl = `${BACKEND_URL}${response.data.download_url}?token=${token}`;
         window.open(downloadUrl, '_blank');
       }
@@ -184,7 +853,7 @@ const AdminDashboard = ({ token }) => {
       });
       
       if (response.data.success) {
-        alert(`Shipping batch created!\n\nShipping ID: ${response.data.shipping_id}\nPets: ${response.data.pet_count}`);
+        alert(`Shipping batch created!\n\nShipping ID: ${response.data.shipping_id}\nPets: ${response.data.pet_count}\n\nCustomers will receive email notifications!`);
         fetchPets();
         fetchStats();
       }
@@ -305,8 +974,6 @@ const AdminDashboard = ({ token }) => {
     };
 
     const ManufacturingTab = () => {
-      const manufacturingPets = pets.filter(p => ['printed', 'manufactured'].includes(p.tag_status));
-      
       return (
         <div className="space-y-4">
           <div className="grid md:grid-cols-2 gap-6">
@@ -488,7 +1155,7 @@ const AdminDashboard = ({ token }) => {
           </div>
           
           <div className="flex space-x-4 mt-4">
-            {['overview', 'pets', 'billing', 'tags'].map((tab) => (
+            {['overview', 'pets', 'billing', 'tags', 'automation'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -523,6 +1190,56 @@ const AdminDashboard = ({ token }) => {
             <div className="bg-white p-6 rounded-xl shadow-lg">
               <h3 className="text-lg font-semibold text-gray-700 mb-2">Monthly Revenue</h3>
               <p className="text-3xl font-bold text-purple-600">R{stats.monthly_revenue}</p>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'automation' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <h2 className="text-xl font-bold text-gray-800 mb-6">Automation & Communication</h2>
+              
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="border rounded-lg p-6">
+                  <h3 className="text-lg font-semibold mb-4">Payment Management</h3>
+                  <div className="space-y-4">
+                    <button
+                      onClick={sendPaymentReminders}
+                      className="w-full bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 font-semibold"
+                    >
+                      Send Payment Reminders
+                    </button>
+                    <p className="text-sm text-gray-600">
+                      Automatically send email reminders to customers with arrears
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="border rounded-lg p-6">
+                  <h3 className="text-lg font-semibold mb-4">Annual Fee Adjustment</h3>
+                  <div className="space-y-4">
+                    <button
+                      onClick={applyAnnualAdjustment}
+                      className="w-full bg-purple-600 text-white py-3 px-4 rounded-lg hover:bg-purple-700 font-semibold"
+                    >
+                      Apply Inflation Adjustment
+                    </button>
+                    <p className="text-sm text-gray-600">
+                      Apply percentage-based fee increase to all active customers
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-semibold text-blue-800 mb-2">📧 Email Notifications</h4>
+                <ul className="text-blue-700 text-sm space-y-1">
+                  <li>• QR codes sent automatically after registration</li>
+                  <li>• Shipping notifications with tracking info</li>
+                  <li>• Payment reminders for failed transactions</li>
+                  <li>• All emails use professional HTML templates</li>
+                </ul>
+              </div>
             </div>
           </div>
         )}
@@ -663,11 +1380,9 @@ const AdminDashboard = ({ token }) => {
 
         {activeTab === 'tags' && (
           <div className="space-y-6">
-            {/* Tag Management Dashboard */}
             <div className="bg-white rounded-xl shadow-lg p-6">
               <h2 className="text-xl font-bold text-gray-800 mb-6">Tag Management Dashboard</h2>
               
-              {/* Status Cards */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                 <div className="bg-orange-50 p-4 rounded-lg text-center">
                   <div className="text-2xl font-bold text-orange-600">{pets.filter(p => p.tag_status === 'ordered').length}</div>
@@ -691,7 +1406,6 @@ const AdminDashboard = ({ token }) => {
                 </div>
               </div>
 
-              {/* Action Buttons */}
               <div className="flex flex-wrap gap-4 mb-6">
                 <button
                   onClick={() => setActiveTagTab('print-queue')}
@@ -701,9 +1415,6 @@ const AdminDashboard = ({ token }) => {
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-1a2 2 0 00-2-2H9a2 2 0 00-2 2v1a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
-                  </svg>
                   <span>Print Queue</span>
                 </button>
                 
@@ -715,9 +1426,6 @@ const AdminDashboard = ({ token }) => {
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-                  </svg>
                   <span>Manufacturing</span>
                 </button>
                 
@@ -729,9 +1437,6 @@ const AdminDashboard = ({ token }) => {
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
-                  </svg>
                   <span>Shipping</span>
                 </button>
                 
@@ -743,14 +1448,10 @@ const AdminDashboard = ({ token }) => {
                       : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                   }`}
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                  </svg>
                   <span>Replacements</span>
                 </button>
               </div>
 
-              {/* Tab Content */}
               <TagManagementContent 
                 activeTab={activeTagTab} 
                 pets={pets} 
@@ -765,7 +1466,7 @@ const AdminDashboard = ({ token }) => {
   );
 };
 
-// Pet Registration Form
+// Pet Registration Form (existing)
 const Registration = () => {
   const [formData, setFormData] = useState({
     pet_name: '',
@@ -823,7 +1524,7 @@ const Registration = () => {
           </div>
           
           <div className="mb-6">
-            <p className="text-sm text-gray-600 mb-4">Your QR code has been generated. A physical tag will be mailed to you.</p>
+            <p className="text-sm text-gray-600 mb-4">Your QR code has been generated and emailed to you. A physical tag will be mailed to your address.</p>
             <img 
               src={`${BACKEND_URL}${success.qr_code_url}`} 
               alt="QR Code" 
@@ -831,12 +1532,21 @@ const Registration = () => {
             />
           </div>
           
-          <button 
-            onClick={() => window.location.reload()}
-            className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition duration-200 font-semibold"
-          >
-            Register Another Pet
-          </button>
+          <div className="space-y-3">
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition duration-200 font-semibold"
+            >
+              Register Another Pet
+            </button>
+            
+            <button 
+              onClick={() => window.location.href = '/customer'}
+              className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition duration-200 font-semibold"
+            >
+              Access Customer Portal
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1025,7 +1735,7 @@ const Registration = () => {
   );
 };
 
-// QR Code Scanner Result Page
+// QR Code Scanner Result Page (existing)
 const ScanResult = () => {
   const { petId } = useParams();
   const [petInfo, setPetInfo] = useState(null);
@@ -1138,7 +1848,7 @@ const ScanResult = () => {
   );
 };
 
-// Home/Landing Page
+// Home/Landing Page (enhanced)
 const Home = () => {
   const navigate = useNavigate();
 
@@ -1160,7 +1870,7 @@ const Home = () => {
               </svg>
             </div>
             <h3 className="text-xl font-semibold mb-2">Register Your Pet</h3>
-            <p className="text-gray-600">Upload pet details and get a unique QR code tag</p>
+            <p className="text-gray-600">Upload pet details and get instant QR code via email</p>
           </div>
           
           <div className="bg-white p-8 rounded-2xl shadow-lg text-center">
@@ -1192,10 +1902,17 @@ const Home = () => {
             Register Your Pet Now
           </button>
           
-          <div className="mt-8">
+          <div className="flex justify-center space-x-4 mt-8">
+            <button 
+              onClick={() => navigate('/customer')}
+              className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition duration-200 font-semibold"
+            >
+              Customer Portal
+            </button>
+            
             <button 
               onClick={() => navigate('/admin')}
-              className="text-gray-500 hover:text-gray-700 text-sm underline"
+              className="text-gray-500 hover:text-gray-700 px-6 py-3 rounded-lg border border-gray-300 hover:border-gray-400 transition duration-200"
             >
               Admin Login
             </button>
@@ -1239,6 +1956,8 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/register" element={<Registration />} />
           <Route path="/scan/:petId" element={<ScanResult />} />
+          <Route path="/customer" element={<CustomerLogin />} />
+          <Route path="/customer/dashboard" element={<CustomerDashboard />} />
           <Route path="/admin" element={<AdminRoute />} />
         </Routes>
       </BrowserRouter>
