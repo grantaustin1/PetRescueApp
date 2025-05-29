@@ -522,6 +522,21 @@ class PetTagAPITester:
             return True
         return False
         
+    def test_get_tag_replacements(self):
+        """Test getting tag replacements"""
+        success, response = self.run_test(
+            "Get Tag Replacements",
+            "GET",
+            "admin/tags/replacements",
+            200,
+            params={"token": self.admin_token}
+        )
+        
+        if success and isinstance(response, list):
+            print(f"Retrieved {len(response)} tag replacements")
+            return True
+        return False
+        
     def test_import_payment_results(self):
         """Test importing payment results from CSV"""
         # Create test CSV file
@@ -551,10 +566,6 @@ class PetTagAPITester:
             print(f"Successfully imported payment results: {response.get('message')}")
             return True
         return False
-
-def main():
-    # Get the backend URL from environment variable or use default
-    backend_url = "https://e22c0c5b-4fc7-4d6b-ae83-493712ca2b48.preview.emergentagent.com"
 
 def main():
     # Get the backend URL from environment variable or use default
