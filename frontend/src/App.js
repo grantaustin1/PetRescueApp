@@ -70,6 +70,8 @@ const AdminDashboard = ({ token }) => {
   const [stats, setStats] = useState(null);
   const [pets, setPets] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
+  const [activeTagTab, setActiveTagTab] = useState('print-queue');
+  const [selectedPets, setSelectedPets] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
