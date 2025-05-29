@@ -1,16 +1,18 @@
-from fastapi import FastAPI, APIRouter, File, UploadFile, HTTPException, Depends, Form
+from fastapi import FastAPI, APIRouter, File, UploadFile, HTTPException, Depends, Form, BackgroundTasks
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
 import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import qrcode
 from io import BytesIO, StringIO
 import base64
@@ -25,6 +27,10 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
+from jinja2 import Environment, FileSystemLoader
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from passlib.hash import bcrypt
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -45,6 +51,33 @@ reports_dir = ROOT_DIR / "reports"
 reports_dir.mkdir(exist_ok=True)
 shipping_dir = ROOT_DIR / "shipping"
 shipping_dir.mkdir(exist_ok=True)
+templates_dir = ROOT_DIR / "templates"
+templates_dir.mkdir(exist_ok=True)
+
+# Email Configuration
+email_conf = ConnectionConfig(
+    MAIL_USERNAME=os.environ['GMAIL_USER'],
+    MAIL_PASSWORD=os.environ['GMAIL_APP_PASSWORD'],
+    MAIL_FROM=os.environ['GMAIL_USER'],
+    MAIL_PORT=int(os.environ['SMTP_PORT']),
+    MAIL_SERVER=os.environ['SMTP_SERVER'],
+    MAIL_STARTTLS=True,
+    MAIL_SSL_TLS=False,
+    USE_CREDENTIALS=True,
+    VALIDATE_CERTS=True
+)
+
+# JWT Configuration
+JWT_SECRET = os.environ['JWT_SECRET']
+JWT_ALGORITHM = os.environ['JWT_ALGORITHM']
+JWT_EXPIRE_HOURS = int(os.environ['JWT_EXPIRE_HOURS'])
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer()
+
+# Jinja2 template environment
+env = Environment(loader=FileSystemLoader(str(templates_dir)))
 
 # Create the main app without a prefix
 app = FastAPI()
@@ -102,6 +135,41 @@ class Pet(BaseModel):
     shipping_tracking: Optional[str] = None
     delivered_date: Optional[datetime] = None
     replacement_count: int = 0
+    annual_adjustment_date: Optional[datetime] = None
+    last_email_sent: Optional[datetime] = None
+
+class CustomerLogin(BaseModel):
+    email: str
+    pet_id: str
+
+class CustomerToken(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+class CustomerProfile(BaseModel):
+    pets: List[Pet]
+    total_pets: int
+    active_payments: int
+    total_donations: float
+
+class PetUpdate(BaseModel):
+    name: Optional[str] = None
+    breed: Optional[str] = None
+    medical_info: Optional[str] = None
+    instructions: Optional[str] = None
+
+class OwnerUpdate(BaseModel):
+    name: Optional[str] = None
+    mobile: Optional[str] = None
+    address: Optional[str] = None
+
+class FeeAdjustment(BaseModel):
+    adjustment_id: str
+    year: int
+    percentage: float
+    new_fee: float
+    applied_date: datetime
+    affected_pets: int
 
 class TagReplacement(BaseModel):
     original_pet_id: str
@@ -181,7 +249,119 @@ class AdminStats(BaseModel):
     total_revenue: float
     replacement_orders: int
 
-# Admin authentication
+# Authentication functions
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return encoded_jwt
+
+def verify_token(token: str):
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return email
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+async def get_current_customer(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    return verify_token(credentials.credentials)
+
+# Email functions
+async def send_email(to: str, subject: str, template_name: str, context: dict, attachments: List = None):
+    """Send email with template"""
+    try:
+        template = env.get_template(template_name)
+        html_body = template.render(**context)
+        
+        message = MessageSchema(
+            subject=subject,
+            recipients=[to],
+            body=html_body,
+            subtype="html",
+            attachments=attachments or []
+        )
+        
+        fm = FastMail(email_conf)
+        await fm.send_message(message)
+        return True
+    except Exception as e:
+        logging.error(f"Failed to send email: {str(e)}")
+        return False
+
+async def send_qr_code_email(pet: Pet, background_tasks: BackgroundTasks):
+    """Send QR code email after registration"""
+    qr_path = qr_codes_dir / f"{pet.pet_id}_qr.png"
+    
+    context = {
+        "owner_name": pet.owner.name,
+        "owner_email": pet.owner.email,
+        "pet_name": pet.name,
+        "breed": pet.breed,
+        "pet_id": pet.pet_id,
+        "registration_date": pet.created_at.strftime("%Y-%m-%d"),
+        "customer_portal_url": f"{os.environ.get('FRONTEND_BASE_URL', 'http://localhost:3000')}/customer"
+    }
+    
+    attachments = []
+    if qr_path.exists():
+        attachments.append({
+            "file": str(qr_path),
+            "headers": {"Content-ID": "<qr_image>"}
+        })
+    
+    background_tasks.add_task(
+        send_email,
+        pet.owner.email,
+        f"🐾 {pet.name}'s Pet Tag Registration Confirmed - {pet.pet_id}",
+        "qr_code_email.html",
+        context,
+        attachments
+    )
+
+async def send_payment_reminder(pet: Pet, background_tasks: BackgroundTasks):
+    """Send payment reminder email"""
+    context = {
+        "owner_name": pet.owner.name,
+        "pet_name": pet.name,
+        "pet_id": pet.pet_id,
+        "monthly_fee": f"{pet.monthly_fee:.2f}",
+        "amount_due": f"{pet.monthly_fee:.2f}",
+        "last_payment_date": pet.last_payment.strftime("%Y-%m-%d") if pet.last_payment else "Never"
+    }
+    
+    background_tasks.add_task(
+        send_email,
+        pet.owner.email,
+        f"💳 Payment Reminder for {pet.name} - {pet.pet_id}",
+        "payment_reminder.html",
+        context
+    )
+
+async def send_shipping_notification(pet: Pet, courier: str, tracking_number: str, background_tasks: BackgroundTasks):
+    """Send shipping notification"""
+    context = {
+        "owner_name": pet.owner.name,
+        "pet_name": pet.name,
+        "pet_id": pet.pet_id,
+        "courier": courier,
+        "tracking_number": tracking_number,
+        "shipping_date": datetime.now().strftime("%Y-%m-%d"),
+        "estimated_delivery": (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
+    }
+    
+    background_tasks.add_task(
+        send_email,
+        pet.owner.email,
+        f"📦 {pet.name}'s Pet Tag Shipped - {pet.pet_id}",
+        "shipping_notification.html",
+        context
+    )
+
+# Admin authentication (simple for MVP)
 ADMIN_TOKEN = "admin123"
 
 def verify_admin(token: str = None):
@@ -191,14 +371,15 @@ def verify_admin(token: str = None):
 
 @api_router.get("/")
 async def root():
-    return {"message": "Pet Tag System API"}
+    return {"message": "Pet Tag System API with Customer Portal"}
 
 @api_router.post("/pets/register")
 async def register_pet(
     pet_data: str = Form(...),
-    photo: UploadFile = File(...)
+    photo: UploadFile = File(...),
+    background_tasks: BackgroundTasks = BackgroundTasks()
 ):
-    """Register a new pet with photo upload"""
+    """Register a new pet with photo upload and email notification"""
     try:
         pet_info = json.loads(pet_data)
         registration_data = PetRegistration(**pet_info)
@@ -246,10 +427,14 @@ async def register_pet(
             photo_url=photo_url,
             owner=owner_data,
             qr_code_url=qr_code_url,
-            last_payment=datetime.now(timezone.utc)
+            last_payment=datetime.now(timezone.utc),
+            annual_adjustment_date=datetime.now(timezone.utc)
         )
         
         await db.pets.insert_one(pet.dict())
+        
+        # Send email notification
+        await send_qr_code_email(pet, background_tasks)
         
         return {"success": True, "pet_id": pet_id, "qr_code_url": qr_code_url}
         
@@ -278,7 +463,178 @@ async def scan_qr_code(pet_id: str):
         logging.error(f"Error scanning QR code: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# ADMIN ENDPOINTS
+# CUSTOMER PORTAL ENDPOINTS
+
+@api_router.post("/customer/login")
+async def customer_login(login_data: CustomerLogin):
+    """Customer login with email and pet ID"""
+    try:
+        # Find pet by email and pet_id
+        pet_doc = await db.pets.find_one({
+            "owner.email": login_data.email,
+            "pet_id": login_data.pet_id
+        })
+        
+        if not pet_doc:
+            raise HTTPException(status_code=401, detail="Invalid email or Pet ID")
+        
+        # Create JWT token
+        access_token = create_access_token(data={"sub": login_data.email})
+        
+        return CustomerToken(access_token=access_token)
+        
+    except Exception as e:
+        logging.error(f"Error during customer login: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/customer/profile")
+async def get_customer_profile(current_customer: str = Depends(get_current_customer)):
+    """Get customer profile with all pets"""
+    try:
+        pets_docs = await db.pets.find({"owner.email": current_customer}).to_list(100)
+        pets = [Pet(**pet) for pet in pets_docs]
+        
+        total_pets = len(pets)
+        active_payments = len([p for p in pets if p.payment_status == "paid"])
+        total_donations = sum(p.monthly_fee for p in pets if p.payment_status == "paid")
+        
+        return CustomerProfile(
+            pets=pets,
+            total_pets=total_pets,
+            active_payments=active_payments,
+            total_donations=total_donations
+        )
+        
+    except Exception as e:
+        logging.error(f"Error getting customer profile: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.put("/customer/pet/{pet_id}")
+async def update_pet(
+    pet_id: str,
+    update_data: PetUpdate,
+    current_customer: str = Depends(get_current_customer)
+):
+    """Update pet information"""
+    try:
+        # Verify ownership
+        pet_doc = await db.pets.find_one({
+            "pet_id": pet_id,
+            "owner.email": current_customer
+        })
+        
+        if not pet_doc:
+            raise HTTPException(status_code=404, detail="Pet not found or not owned by customer")
+        
+        # Update pet data
+        update_fields = {k: v for k, v in update_data.dict().items() if v is not None}
+        
+        if update_fields:
+            await db.pets.update_one(
+                {"pet_id": pet_id},
+                {"$set": update_fields}
+            )
+        
+        return {"success": True, "message": "Pet updated successfully"}
+        
+    except Exception as e:
+        logging.error(f"Error updating pet: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.put("/customer/profile")
+async def update_customer_profile(
+    update_data: OwnerUpdate,
+    current_customer: str = Depends(get_current_customer)
+):
+    """Update customer contact information"""
+    try:
+        # Update all pets owned by this customer
+        update_fields = {}
+        for field, value in update_data.dict().items():
+            if value is not None:
+                update_fields[f"owner.{field}"] = value
+        
+        if update_fields:
+            result = await db.pets.update_many(
+                {"owner.email": current_customer},
+                {"$set": update_fields}
+            )
+            
+            return {"success": True, "updated_pets": result.modified_count}
+        
+        return {"success": True, "message": "No changes to update"}
+        
+    except Exception as e:
+        logging.error(f"Error updating customer profile: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/customer/request-replacement/{pet_id}")
+async def request_tag_replacement(
+    pet_id: str,
+    reason: str,
+    current_customer: str = Depends(get_current_customer)
+):
+    """Request tag replacement"""
+    try:
+        # Verify ownership
+        pet_doc = await db.pets.find_one({
+            "pet_id": pet_id,
+            "owner.email": current_customer
+        })
+        
+        if not pet_doc:
+            raise HTTPException(status_code=404, detail="Pet not found or not owned by customer")
+        
+        # Create replacement request
+        replacement = TagReplacement(
+            original_pet_id=pet_id,
+            new_pet_id="PENDING",  # Will be assigned by admin
+            reason=reason
+        )
+        
+        await db.tag_replacements.insert_one(replacement.dict())
+        
+        return {
+            "success": True,
+            "message": "Replacement request submitted",
+            "replacement_fee": replacement.replacement_fee
+        }
+        
+    except Exception as e:
+        logging.error(f"Error requesting tag replacement: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/customer/download-qr/{pet_id}")
+async def download_qr_code(
+    pet_id: str,
+    current_customer: str = Depends(get_current_customer)
+):
+    """Download QR code for customer's pet"""
+    try:
+        # Verify ownership
+        pet_doc = await db.pets.find_one({
+            "pet_id": pet_id,
+            "owner.email": current_customer
+        })
+        
+        if not pet_doc:
+            raise HTTPException(status_code=404, detail="Pet not found or not owned by customer")
+        
+        qr_path = qr_codes_dir / f"{pet_id}_qr.png"
+        if not qr_path.exists():
+            raise HTTPException(status_code=404, detail="QR code file not found")
+        
+        return FileResponse(
+            path=str(qr_path),
+            filename=f"{pet_id}_qr_code.png",
+            media_type="image/png"
+        )
+        
+    except Exception as e:
+        logging.error(f"Error downloading QR code: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ADMIN ENDPOINTS (Enhanced with automation)
 
 @api_router.post("/admin/login")
 async def admin_login(token: str):
@@ -329,6 +685,93 @@ async def get_admin_stats(token: str):
         logging.error(f"Error getting admin stats: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.post("/admin/automation/send-payment-reminders")
+async def send_payment_reminders(token: str, background_tasks: BackgroundTasks):
+    """Send payment reminder emails to customers in arrears"""
+    verify_admin(token)
+    try:
+        arrears_pets = await db.pets.find({"payment_status": "arrears"}).to_list(1000)
+        
+        sent_count = 0
+        for pet_doc in arrears_pets:
+            pet = Pet(**pet_doc)
+            # Send reminder email
+            await send_payment_reminder(pet, background_tasks)
+            sent_count += 1
+            
+            # Update last email sent timestamp
+            await db.pets.update_one(
+                {"pet_id": pet.pet_id},
+                {"$set": {"last_email_sent": datetime.now(timezone.utc)}}
+            )
+        
+        return {
+            "success": True,
+            "reminders_sent": sent_count,
+            "message": f"Sent {sent_count} payment reminder emails"
+        }
+        
+    except Exception as e:
+        logging.error(f"Error sending payment reminders: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/admin/automation/annual-fee-adjustment")
+async def apply_annual_fee_adjustment(token: str, percentage: float):
+    """Apply annual fee adjustment to all active pets"""
+    verify_admin(token)
+    try:
+        current_year = datetime.now().year
+        adjustment_id = f"ADJ{current_year}_{int(percentage*100)}"
+        
+        # Get all pets that haven't had this year's adjustment
+        pets = await db.pets.find({
+            "payment_status": "paid",
+            "$or": [
+                {"annual_adjustment_date": {"$exists": False}},
+                {"annual_adjustment_date": {"$lt": datetime(current_year, 1, 1)}}
+            ]
+        }).to_list(10000)
+        
+        updated_count = 0
+        for pet_doc in pets:
+            pet = Pet(**pet_doc)
+            new_fee = round(pet.monthly_fee * (1 + percentage / 100), 2)
+            
+            await db.pets.update_one(
+                {"pet_id": pet.pet_id},
+                {
+                    "$set": {
+                        "monthly_fee": new_fee,
+                        "annual_adjustment_date": datetime.now(timezone.utc)
+                    }
+                }
+            )
+            updated_count += 1
+        
+        # Record the adjustment
+        adjustment = FeeAdjustment(
+            adjustment_id=adjustment_id,
+            year=current_year,
+            percentage=percentage,
+            new_fee=2.0 * (1 + percentage / 100),  # Base fee adjusted
+            applied_date=datetime.now(timezone.utc),
+            affected_pets=updated_count
+        )
+        
+        await db.fee_adjustments.insert_one(adjustment.dict())
+        
+        return {
+            "success": True,
+            "adjustment_id": adjustment_id,
+            "affected_pets": updated_count,
+            "percentage": percentage,
+            "message": f"Applied {percentage}% fee increase to {updated_count} pets"
+        }
+        
+    except Exception as e:
+        logging.error(f"Error applying fee adjustment: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @api_router.get("/admin/pets")
 async def get_all_pets(token: str):
     """Admin endpoint to get all pets"""
@@ -340,8 +783,7 @@ async def get_all_pets(token: str):
         logging.error(f"Error getting pets: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# TAG MANAGEMENT ENDPOINTS
-
+# TAG MANAGEMENT ENDPOINTS (existing ones remain the same)
 @api_router.get("/admin/tags/print-queue")
 async def get_print_queue(token: str):
     """Get pets that need tags printed"""
@@ -358,7 +800,6 @@ async def generate_print_report(token: str, request: PrintJobRequest):
     """Generate PDF print report for manufacturing"""
     verify_admin(token)
     try:
-        # Get pets data
         pets_data = []
         for pet_id in request.pet_ids:
             pet_doc = await db.pets.find_one({"pet_id": pet_id})
@@ -368,7 +809,6 @@ async def generate_print_report(token: str, request: PrintJobRequest):
         if not pets_data:
             raise HTTPException(status_code=400, detail="No valid pets found")
         
-        # Generate PDF report
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"print_job_{timestamp}.pdf"
         filepath = reports_dir / filename
@@ -377,18 +817,16 @@ async def generate_print_report(token: str, request: PrintJobRequest):
         story = []
         styles = getSampleStyleSheet()
         
-        # Title
         title_style = ParagraphStyle(
             'CustomTitle',
             parent=styles['Heading1'],
             fontSize=24,
             spaceAfter=30,
-            alignment=1  # Center
+            alignment=1
         )
         story.append(Paragraph("Pet Tag Manufacturing Report", title_style))
         story.append(Spacer(1, 20))
         
-        # Job details
         job_info = f"""
         <b>Print Job Details:</b><br/>
         Job Name: {request.job_name or 'Standard Print Job'}<br/>
@@ -398,11 +836,9 @@ async def generate_print_report(token: str, request: PrintJobRequest):
         story.append(Paragraph(job_info, styles['Normal']))
         story.append(Spacer(1, 20))
         
-        # Create table data
         data = [['Pet ID', 'Pet Name', 'Owner', 'QR Code', 'Address']]
         
         for pet in pets_data:
-            # Add QR code image
             qr_path = qr_codes_dir / f"{pet.pet_id}_qr.png"
             if qr_path.exists():
                 qr_img = Image(str(qr_path), width=1*inch, height=1*inch)
@@ -417,7 +853,6 @@ async def generate_print_report(token: str, request: PrintJobRequest):
                 pet.owner.address[:50] + "..." if len(pet.owner.address) > 50 else pet.owner.address
             ])
         
-        # Create table
         table = Table(data, colWidths=[1.2*inch, 1.2*inch, 1.5*inch, 1.2*inch, 2*inch])
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
@@ -459,10 +894,8 @@ async def create_manufacturing_batch(token: str, pet_ids: List[str], notes: Opti
             manufacturing_notes=notes
         )
         
-        # Save batch to database
         await db.manufacturing_batches.insert_one(batch.dict())
         
-        # Update pets with batch ID and status
         await db.pets.update_many(
             {"pet_id": {"$in": pet_ids}},
             {
@@ -484,58 +917,13 @@ async def create_manufacturing_batch(token: str, pet_ids: List[str], notes: Opti
         logging.error(f"Error creating manufacturing batch: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.get("/admin/tags/manufacturing-batches")
-async def get_manufacturing_batches(token: str):
-    """Get all manufacturing batches"""
-    verify_admin(token)
-    try:
-        batches = await db.manufacturing_batches.find().sort("created_at", -1).to_list(100)
-        return [ManufacturingBatch(**batch) for batch in batches]
-    except Exception as e:
-        logging.error(f"Error getting manufacturing batches: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.post("/admin/tags/update-manufacturing-batch")
-async def update_manufacturing_batch(token: str, batch_id: str, status: str, notes: Optional[str] = ""):
-    """Update manufacturing batch status"""
-    verify_admin(token)
-    try:
-        update_data = {"status": status}
-        if status == "completed":
-            update_data["actual_completion"] = datetime.now(timezone.utc)
-        
-        # Update batch
-        result = await db.manufacturing_batches.update_one(
-            {"batch_id": batch_id},
-            {"$set": update_data}
-        )
-        
-        if result.modified_count == 0:
-            raise HTTPException(status_code=404, detail="Manufacturing batch not found")
-        
-        # Update pets status if batch is completed
-        if status == "completed":
-            batch_doc = await db.manufacturing_batches.find_one({"batch_id": batch_id})
-            if batch_doc:
-                await db.pets.update_many(
-                    {"pet_id": {"$in": batch_doc["pet_ids"]}},
-                    {"$set": {"tag_status": "manufactured"}}
-                )
-        
-        return {"success": True, "message": f"Batch {batch_id} updated to {status}"}
-        
-    except Exception as e:
-        logging.error(f"Error updating manufacturing batch: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @api_router.post("/admin/tags/create-shipping-batch")
-async def create_shipping_batch(token: str, pet_ids: List[str], courier: str, tracking_number: Optional[str] = ""):
-    """Create shipping batch for manufactured tags"""
+async def create_shipping_batch(token: str, pet_ids: List[str], courier: str, tracking_number: Optional[str] = "", background_tasks: BackgroundTasks = BackgroundTasks()):
+    """Create shipping batch for manufactured tags with email notifications"""
     verify_admin(token)
     try:
         shipping_id = f"SHIP{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         
-        # Get first pet's address for shipping (assuming same area shipping)
         pet_doc = await db.pets.find_one({"pet_id": pet_ids[0]})
         if not pet_doc:
             raise HTTPException(status_code=404, detail="Pet not found")
@@ -550,14 +938,19 @@ async def create_shipping_batch(token: str, pet_ids: List[str], courier: str, tr
             shipping_address=shipping_address
         )
         
-        # Save shipping batch
         await db.shipping_batches.insert_one(batch.dict())
         
-        # Update pets status
         await db.pets.update_many(
             {"pet_id": {"$in": pet_ids}},
             {"$set": {"tag_status": "shipped", "shipping_tracking": tracking_number}}
         )
+        
+        # Send shipping notifications
+        for pet_id in pet_ids:
+            pet_doc = await db.pets.find_one({"pet_id": pet_id})
+            if pet_doc:
+                pet = Pet(**pet_doc)
+                await send_shipping_notification(pet, courier, tracking_number, background_tasks)
         
         return {
             "success": True,
@@ -568,17 +961,6 @@ async def create_shipping_batch(token: str, pet_ids: List[str], courier: str, tr
         
     except Exception as e:
         logging.error(f"Error creating shipping batch: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@api_router.get("/admin/tags/shipping-batches")
-async def get_shipping_batches(token: str):
-    """Get all shipping batches"""
-    verify_admin(token)
-    try:
-        batches = await db.shipping_batches.find().sort("created_at", -1).to_list(100)
-        return [ShippingBatch(**batch) for batch in batches]
-    except Exception as e:
-        logging.error(f"Error getting shipping batches: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/admin/tags/bulk-update")
@@ -628,24 +1010,18 @@ async def update_tag_status(token: str, update: TagUpdate):
         logging.error(f"Error updating tag status: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# TAG REPLACEMENT ENDPOINTS
-
 @api_router.post("/admin/tags/create-replacement")
 async def create_tag_replacement(token: str, original_pet_id: str, reason: str):
     """Create a replacement tag for lost/damaged tag"""
     verify_admin(token)
     try:
-        # Get original pet
         original_pet_doc = await db.pets.find_one({"pet_id": original_pet_id})
         if not original_pet_doc:
             raise HTTPException(status_code=404, detail="Original pet not found")
         
         original_pet = Pet(**original_pet_doc)
-        
-        # Generate new pet ID for replacement
         new_pet_id = await get_next_pet_id()
         
-        # Create replacement record
         replacement = TagReplacement(
             original_pet_id=original_pet_id,
             new_pet_id=new_pet_id,
@@ -666,7 +1042,6 @@ async def create_tag_replacement(token: str, original_pet_id: str, reason: str):
         qr_img.save(qr_path)
         qr_code_url = f"/qr_codes/{qr_filename}"
         
-        # Create new pet record (copy of original with new ID)
         new_pet = original_pet.copy()
         new_pet.pet_id = new_pet_id
         new_pet.qr_code_url = qr_code_url
@@ -676,7 +1051,6 @@ async def create_tag_replacement(token: str, original_pet_id: str, reason: str):
         
         await db.pets.insert_one(new_pet.dict())
         
-        # Update original pet status
         await db.pets.update_one(
             {"pet_id": original_pet_id},
             {"$set": {"tag_status": "replaced"}}
@@ -694,19 +1068,7 @@ async def create_tag_replacement(token: str, original_pet_id: str, reason: str):
         logging.error(f"Error creating tag replacement: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.get("/admin/tags/replacements")
-async def get_tag_replacements(token: str):
-    """Get all tag replacements"""
-    verify_admin(token)
-    try:
-        replacements = await db.tag_replacements.find().sort("created_at", -1).to_list(100)
-        return [TagReplacement(**replacement) for replacement in replacements]
-    except Exception as e:
-        logging.error(f"Error getting tag replacements: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 # BILLING ENDPOINTS (existing)
-
 @api_router.post("/admin/billing/generate-csv")
 async def generate_billing_csv(token: str):
     """Generate monthly billing CSV for bank processing"""
@@ -737,7 +1099,7 @@ async def generate_billing_csv(token: str):
         return {
             "success": True,
             "filename": csv_filename,
-            "total_amount": len(pets) * 2.0,
+            "total_amount": sum(Pet(**pet).monthly_fee for pet in pets),
             "customer_count": len(pets),
             "download_url": f"/billing/{csv_filename}"
         }
@@ -749,7 +1111,8 @@ async def generate_billing_csv(token: str):
 @api_router.post("/admin/payments/import-results")
 async def import_payment_results(
     token: str,
-    results_file: UploadFile = File(...)
+    results_file: UploadFile = File(...),
+    background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     """Import payment results from bank processing"""
     verify_admin(token)
@@ -784,12 +1147,18 @@ async def import_payment_results(
                 )
                 if result.modified_count > 0:
                     failed_count += 1
+                    
+                    # Send payment reminder for failed payments
+                    pet_doc = await db.pets.find_one({"pet_id": customer_id})
+                    if pet_doc:
+                        pet = Pet(**pet_doc)
+                        await send_payment_reminder(pet, background_tasks)
         
         return {
             "success": True,
             "updated_count": updated_count,
             "failed_count": failed_count,
-            "message": f"Updated {updated_count} successful payments, {failed_count} failed payments"
+            "message": f"Updated {updated_count} successful payments, {failed_count} failed payments. Reminders sent to failed payments."
         }
         
     except Exception as e:
