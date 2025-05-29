@@ -142,6 +142,92 @@ const AdminDashboard = ({ token }) => {
     }
   };
 
+  const generatePrintReport = async (petIds, jobName = '') => {
+    try {
+      const response = await axios.post(`${API}/admin/tags/generate-print-report?token=${token}`, {
+        pet_ids: petIds,
+        job_name: jobName || `Print Job ${new Date().toLocaleDateString()}`
+      });
+      
+      if (response.data.success) {
+        alert(`Print report generated successfully!\n\nFile: ${response.data.filename}\nPet Count: ${response.data.pet_count}`);
+        
+        // Download the file
+        const downloadUrl = `${BACKEND_URL}${response.data.download_url}?token=${token}`;
+        window.open(downloadUrl, '_blank');
+      }
+    } catch (error) {
+      alert('Error generating print report: ' + error.response?.data?.detail);
+    }
+  };
+
+  const createManufacturingBatch = async (petIds, notes = '') => {
+    try {
+      const response = await axios.post(`${API}/admin/tags/create-manufacturing-batch?token=${token}`, petIds, {
+        params: { notes }
+      });
+      
+      if (response.data.success) {
+        alert(`Manufacturing batch created!\n\nBatch ID: ${response.data.batch_id}\nPets: ${response.data.pet_count}`);
+        fetchPets();
+        fetchStats();
+      }
+    } catch (error) {
+      alert('Error creating manufacturing batch: ' + error.response?.data?.detail);
+    }
+  };
+
+  const createShippingBatch = async (petIds, courier, trackingNumber = '') => {
+    try {
+      const response = await axios.post(`${API}/admin/tags/create-shipping-batch?token=${token}`, petIds, {
+        params: { courier, tracking_number: trackingNumber }
+      });
+      
+      if (response.data.success) {
+        alert(`Shipping batch created!\n\nShipping ID: ${response.data.shipping_id}\nPets: ${response.data.pet_count}`);
+        fetchPets();
+        fetchStats();
+      }
+    } catch (error) {
+      alert('Error creating shipping batch: ' + error.response?.data?.detail);
+    }
+  };
+
+  const bulkUpdateTagStatus = async (petIds, newStatus) => {
+    try {
+      const response = await axios.post(`${API}/admin/tags/bulk-update?token=${token}`, {
+        pet_ids: petIds,
+        new_status: newStatus,
+        notes: `Bulk update to ${newStatus}`
+      });
+      
+      if (response.data.success) {
+        alert(`Updated ${response.data.updated_count} pets to ${newStatus}`);
+        fetchPets();
+        fetchStats();
+        setSelectedPets([]);
+      }
+    } catch (error) {
+      alert('Error bulk updating tag status');
+    }
+  };
+
+  const createTagReplacement = async (petId, reason) => {
+    try {
+      const response = await axios.post(`${API}/admin/tags/create-replacement?token=${token}`, null, {
+        params: { original_pet_id: petId, reason }
+      });
+      
+      if (response.data.success) {
+        alert(`Tag replacement created!\n\nOriginal ID: ${response.data.original_pet_id}\nNew ID: ${response.data.new_pet_id}\nFee: R${response.data.replacement_fee}`);
+        fetchPets();
+        fetchStats();
+      }
+    } catch (error) {
+      alert('Error creating tag replacement: ' + error.response?.data?.detail);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
