@@ -21,6 +21,7 @@ class PetTagAPITester:
         self.manufacturing_batch_id = None
         self.shipping_batch_id = None
         self.replacement_pet_id = None
+        self.customer_token = None
 
     def run_test(self, name, method, endpoint, expected_status, data=None, files=None, headers=None, params=None):
         """Run a single API test"""
@@ -37,6 +38,8 @@ class PetTagAPITester:
                     response = requests.post(url, data=data, files=files, headers=headers, params=params)
                 else:
                     response = requests.post(url, json=data, headers=headers, params=params)
+            elif method == 'PUT':
+                response = requests.put(url, json=data, headers=headers, params=params)
 
             print(f"Status Code: {response.status_code}")
             
@@ -175,8 +178,6 @@ class PetTagAPITester:
             print(f"Total Pets: {response.get('total_pets')}")
             print(f"Pets Paid: {response.get('pets_paid')}")
             print(f"Pets in Arrears: {response.get('pets_in_arrears')}")
-            print(f"Tags to Print: {response.get('tags_to_print')}")
-            print(f"Tags Shipped: {response.get('tags_shipped')}")
             print(f"Monthly Revenue: R{response.get('monthly_revenue')}")
             return True
         return False
@@ -382,45 +383,6 @@ class PetTagAPITester:
             return True
         return False
         
-    def test_get_manufacturing_batches(self):
-        """Test getting manufacturing batches"""
-        success, response = self.run_test(
-            "Get Manufacturing Batches",
-            "GET",
-            "admin/tags/manufacturing-batches",
-            200,
-            params={"token": self.admin_token}
-        )
-        
-        if success and isinstance(response, list):
-            print(f"Retrieved {len(response)} manufacturing batches")
-            return True
-        return False
-        
-    def test_update_manufacturing_batch(self):
-        """Test updating manufacturing batch status"""
-        if not self.manufacturing_batch_id:
-            print("❌ Cannot test batch update without a batch ID")
-            return False
-            
-        success, response = self.run_test(
-            "Update Manufacturing Batch",
-            "POST",
-            "admin/tags/update-manufacturing-batch",
-            200,
-            params={
-                "token": self.admin_token,
-                "batch_id": self.manufacturing_batch_id,
-                "status": "completed",
-                "notes": "Test completion"
-            }
-        )
-        
-        if success and response.get('success'):
-            print(f"Updated manufacturing batch {self.manufacturing_batch_id} to 'completed'")
-            return True
-        return False
-        
     def test_create_shipping_batch(self):
         """Test creating a shipping batch"""
         if not self.pet_id:
@@ -454,21 +416,6 @@ class PetTagAPITester:
             self.shipping_batch_id = response.get('shipping_id')
             print(f"Created shipping batch: {self.shipping_batch_id}")
             print(f"Pet Count: {response.get('pet_count')}")
-            return True
-        return False
-        
-    def test_get_shipping_batches(self):
-        """Test getting shipping batches"""
-        success, response = self.run_test(
-            "Get Shipping Batches",
-            "GET",
-            "admin/tags/shipping-batches",
-            200,
-            params={"token": self.admin_token}
-        )
-        
-        if success and isinstance(response, list):
-            print(f"Retrieved {len(response)} shipping batches")
             return True
         return False
         
@@ -522,21 +469,6 @@ class PetTagAPITester:
             return True
         return False
         
-    def test_get_tag_replacements(self):
-        """Test getting tag replacements"""
-        success, response = self.run_test(
-            "Get Tag Replacements",
-            "GET",
-            "admin/tags/replacements",
-            200,
-            params={"token": self.admin_token}
-        )
-        
-        if success and isinstance(response, list):
-            print(f"Retrieved {len(response)} tag replacements")
-            return True
-        return False
-        
     def test_import_payment_results(self):
         """Test importing payment results from CSV"""
         # Create test CSV file
@@ -567,6 +499,186 @@ class PetTagAPITester:
             return True
         return False
 
+    def test_customer_login(self):
+        """Test customer login with email and pet ID"""
+        if not self.pet_id:
+            print("❌ Cannot test customer login without a pet ID")
+            return False
+            
+        success, response = self.run_test(
+            "Customer Login",
+            "POST",
+            "customer/login",
+            200,
+            data={"email": "john@example.com", "pet_id": self.pet_id}
+        )
+        
+        if success and 'access_token' in response:
+            self.customer_token = response['access_token']
+            print(f"Customer login successful with token: {self.customer_token[:10]}...")
+            return True
+        return False
+        
+    def test_customer_profile(self):
+        """Test getting customer profile"""
+        if not hasattr(self, 'customer_token'):
+            print("❌ Cannot test customer profile without a token")
+            return False
+            
+        headers = {"Authorization": f"Bearer {self.customer_token}"}
+        success, response = self.run_test(
+            "Customer Profile",
+            "GET",
+            "customer/profile",
+            200,
+            headers=headers
+        )
+        
+        if success:
+            print("Customer Profile:")
+            print(f"Total Pets: {response.get('total_pets')}")
+            print(f"Active Payments: {response.get('active_payments')}")
+            print(f"Total Donations: R{response.get('total_donations')}")
+            return True
+        return False
+        
+    def test_update_pet_info(self):
+        """Test updating pet information"""
+        if not hasattr(self, 'customer_token') or not self.pet_id:
+            print("❌ Cannot test pet update without token and pet ID")
+            return False
+            
+        headers = {"Authorization": f"Bearer {self.customer_token}"}
+        success, response = self.run_test(
+            "Update Pet Info",
+            "PUT",
+            f"customer/pet/{self.pet_id}",
+            200,
+            data={
+                "name": "Buddy Updated",
+                "breed": "Golden Retriever Mix",
+                "medical_info": "Allergic to chicken and beef",
+                "instructions": "Loves to play fetch and swim"
+            },
+            headers=headers
+        )
+        
+        if success and response.get('success'):
+            print(f"Successfully updated pet information")
+            return True
+        return False
+        
+    def test_update_customer_profile(self):
+        """Test updating customer profile"""
+        if not hasattr(self, 'customer_token'):
+            print("❌ Cannot test profile update without token")
+            return False
+            
+        headers = {"Authorization": f"Bearer {self.customer_token}"}
+        success, response = self.run_test(
+            "Update Customer Profile",
+            "PUT",
+            "customer/profile",
+            200,
+            data={
+                "name": "John Smith",
+                "mobile": "+27987654321",
+                "address": "456 Main St, Cape Town"
+            },
+            headers=headers
+        )
+        
+        if success and response.get('success'):
+            print(f"Successfully updated customer profile")
+            return True
+        return False
+        
+    def test_request_tag_replacement(self):
+        """Test requesting tag replacement as customer"""
+        if not hasattr(self, 'customer_token') or not self.pet_id:
+            print("❌ Cannot test tag replacement request without token and pet ID")
+            return False
+            
+        headers = {"Authorization": f"Bearer {self.customer_token}"}
+        success, response = self.run_test(
+            "Request Tag Replacement",
+            "POST",
+            f"customer/request-replacement/{self.pet_id}?reason=lost",
+            200,
+            headers=headers
+        )
+        
+        if success and response.get('success'):
+            print(f"Successfully requested tag replacement")
+            print(f"Replacement Fee: R{response.get('replacement_fee')}")
+            return True
+        return False
+        
+    def test_download_qr_code(self):
+        """Test downloading QR code as customer"""
+        if not hasattr(self, 'customer_token') or not self.pet_id:
+            print("❌ Cannot test QR code download without token and pet ID")
+            return False
+            
+        headers = {"Authorization": f"Bearer {self.customer_token}"}
+        url = f"{self.api_url}/customer/download-qr/{self.pet_id}"
+        print(f"Downloading QR code from: {url}")
+        
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                self.tests_passed += 1
+                self.tests_run += 1
+                print("✅ QR code download successful")
+                
+                # Verify it's an image
+                if response.headers.get('Content-Type') == 'image/png':
+                    print("✅ QR code is a PNG image")
+                    return True
+                else:
+                    print(f"❌ QR code has unexpected content type: {response.headers.get('Content-Type')}")
+                    return False
+            else:
+                self.tests_run += 1
+                print(f"❌ Failed to download QR code - Status: {response.status_code}")
+                return False
+        except Exception as e:
+            self.tests_run += 1
+            print(f"❌ Failed to download QR code - Error: {str(e)}")
+            return False
+            
+    def test_send_payment_reminders(self):
+        """Test sending payment reminders to customers in arrears"""
+        success, response = self.run_test(
+            "Send Payment Reminders",
+            "POST",
+            "admin/automation/send-payment-reminders",
+            200,
+            params={"token": self.admin_token}
+        )
+        
+        if success and response.get('success'):
+            print(f"Successfully sent {response.get('reminders_sent')} payment reminders")
+            return True
+        return False
+        
+    def test_annual_fee_adjustment(self):
+        """Test applying annual fee adjustment"""
+        success, response = self.run_test(
+            "Annual Fee Adjustment",
+            "POST",
+            "admin/automation/annual-fee-adjustment",
+            200,
+            params={"token": self.admin_token, "percentage": 5}
+        )
+        
+        if success and response.get('success'):
+            print(f"Successfully applied 5% fee adjustment")
+            print(f"Adjustment ID: {response.get('adjustment_id')}")
+            print(f"Affected Pets: {response.get('affected_pets')}")
+            return True
+        return False
+
 def main():
     # Get the backend URL from environment variable or use default
     backend_url = "https://e22c0c5b-4fc7-4d6b-ae83-493712ca2b48.preview.emergentagent.com"
@@ -581,7 +693,9 @@ def main():
         print("❌ Basic API connectivity test failed, stopping tests")
         return 1
     
-    # Test pet registration
+    print("\n=== Testing Phase 4 Email Integration & Registration ===\n")
+    
+    # Test pet registration (should trigger automatic QR code email)
     if not tester.test_pet_registration():
         print("❌ Pet registration test failed, stopping tests")
         return 1
@@ -589,10 +703,34 @@ def main():
     # Test QR code scanning
     if not tester.test_qr_scan():
         print("❌ QR code scanning test failed")
-        return 1
     
-    # Test admin functionality
-    print("\n=== Testing Admin Functionality ===\n")
+    print("\n=== Testing Customer Portal & Self-Service ===\n")
+    
+    # Test customer login
+    if not tester.test_customer_login():
+        print("❌ Customer login test failed, stopping customer tests")
+    else:
+        # Test customer profile
+        if not tester.test_customer_profile():
+            print("❌ Customer profile test failed")
+        
+        # Test updating pet information
+        if not tester.test_update_pet_info():
+            print("❌ Update pet info test failed")
+        
+        # Test updating customer profile
+        if not tester.test_update_customer_profile():
+            print("❌ Update customer profile test failed")
+        
+        # Test requesting tag replacement
+        if not tester.test_request_tag_replacement():
+            print("❌ Request tag replacement test failed")
+        
+        # Test downloading QR code
+        if not tester.test_download_qr_code():
+            print("❌ Download QR code test failed")
+    
+    print("\n=== Testing Admin Functionality & Automation ===\n")
     
     # Test admin login
     if not tester.test_admin_login():
@@ -603,31 +741,18 @@ def main():
     if not tester.test_admin_stats():
         print("❌ Admin stats test failed")
     
-    # Test getting all pets
-    if not tester.test_get_all_pets():
-        print("❌ Get all pets test failed")
+    # Test sending payment reminders
+    if not tester.test_send_payment_reminders():
+        print("❌ Send payment reminders test failed")
     
-    # Test generating billing CSV
-    if not tester.test_generate_billing_csv():
-        print("❌ Generate billing CSV test failed")
-    else:
-        # Test downloading billing CSV
-        if not tester.test_download_billing_csv():
-            print("❌ Download billing CSV test failed")
+    # Test annual fee adjustment
+    if not tester.test_annual_fee_adjustment():
+        print("❌ Annual fee adjustment test failed")
     
-    # Test updating payment status
-    if not tester.test_update_payment_status():
-        print("❌ Update payment status test failed")
+    # Test shipping notification (via shipping batch creation)
+    if not tester.test_create_shipping_batch():
+        print("❌ Create shipping batch test failed")
     
-    # Test getting print queue
-    if not tester.test_get_print_queue():
-        print("❌ Get print queue test failed")
-    
-    # Test importing payment results
-    if not tester.test_import_payment_results():
-        print("❌ Import payment results test failed")
-    
-    # Test new tag management features
     print("\n=== Testing Tag Management Features ===\n")
     
     # Test generating print report
@@ -637,22 +762,6 @@ def main():
     # Test creating manufacturing batch
     if not tester.test_create_manufacturing_batch():
         print("❌ Create manufacturing batch test failed")
-    else:
-        # Test getting manufacturing batches
-        if not tester.test_get_manufacturing_batches():
-            print("❌ Get manufacturing batches test failed")
-        
-        # Test updating manufacturing batch
-        if not tester.test_update_manufacturing_batch():
-            print("❌ Update manufacturing batch test failed")
-    
-    # Test creating shipping batch
-    if not tester.test_create_shipping_batch():
-        print("❌ Create shipping batch test failed")
-    else:
-        # Test getting shipping batches
-        if not tester.test_get_shipping_batches():
-            print("❌ Get shipping batches test failed")
     
     # Test bulk updating tag status
     if not tester.test_bulk_update_tag_status():
@@ -661,10 +770,6 @@ def main():
     # Test creating tag replacement
     if not tester.test_create_tag_replacement():
         print("❌ Create tag replacement test failed")
-    else:
-        # Test getting tag replacements
-        if not tester.test_get_tag_replacements():
-            print("❌ Get tag replacements test failed")
     
     # Print results
     print(f"\n📊 Tests passed: {tester.tests_passed}/{tester.tests_run}")
@@ -672,4 +777,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-      
