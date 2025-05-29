@@ -343,52 +343,85 @@ const AdminDashboard = ({ token }) => {
         )}
 
         {activeTab === 'tags' && (
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-6">Tag Management</h2>
-            
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="border rounded-lg p-6">
-                <h3 className="text-lg font-semibold mb-4">Print Queue</h3>
-                <p className="text-gray-600 mb-4">
-                  {pets.filter(p => p.tag_status === 'ordered').length} tags need printing
-                </p>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {pets.filter(p => p.tag_status === 'ordered').map(pet => (
-                    <div key={pet.pet_id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                      <span className="font-mono text-sm">{pet.pet_id}</span>
-                      <span className="text-sm">{pet.name}</span>
-                      <button
-                        onClick={() => updateTagStatus(pet.pet_id, 'printed')}
-                        className="text-xs bg-blue-600 text-white px-2 py-1 rounded"
-                      >
-                        Mark Printed
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
+          <div className="space-y-6">
+            {/* Tag Management Dashboard */}
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <h2 className="text-xl font-bold text-gray-800 mb-6">Tag Management Dashboard</h2>
               
-              <div className="border rounded-lg p-6">
-                <h3 className="text-lg font-semibold mb-4">Tag Status Summary</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span>Ordered:</span>
-                    <span className="font-semibold">{pets.filter(p => p.tag_status === 'ordered').length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Printed:</span>
-                    <span className="font-semibold">{pets.filter(p => p.tag_status === 'printed').length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Shipped:</span>
-                    <span className="font-semibold">{pets.filter(p => p.tag_status === 'shipped').length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Delivered:</span>
-                    <span className="font-semibold">{pets.filter(p => p.tag_status === 'delivered').length}</span>
-                  </div>
+              {/* Status Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                <div className="bg-orange-50 p-4 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-orange-600">{pets.filter(p => p.tag_status === 'ordered').length}</div>
+                  <div className="text-sm text-orange-700">Ordered</div>
+                </div>
+                <div className="bg-blue-50 p-4 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-blue-600">{pets.filter(p => p.tag_status === 'printed').length}</div>
+                  <div className="text-sm text-blue-700">Printed</div>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-purple-600">{pets.filter(p => p.tag_status === 'manufactured').length}</div>
+                  <div className="text-sm text-purple-700">Manufactured</div>
+                </div>
+                <div className="bg-indigo-50 p-4 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-indigo-600">{pets.filter(p => p.tag_status === 'shipped').length}</div>
+                  <div className="text-sm text-indigo-700">Shipped</div>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-green-600">{pets.filter(p => p.tag_status === 'delivered').length}</div>
+                  <div className="text-sm text-green-700">Delivered</div>
                 </div>
               </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap gap-4 mb-6">
+                <button
+                  onClick={() => setActiveTagTab('print-queue')}
+                  className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 flex items-center space-x-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-1a2 2 0 00-2-2H9a2 2 0 00-2 2v1a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+                  </svg>
+                  <span>Print Queue</span>
+                </button>
+                
+                <button
+                  onClick={() => setActiveTagTab('manufacturing')}
+                  className="bg-purple-600 text-white px-6 py-2 rounded-lg hover:bg-purple-700 flex items-center space-x-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+                  </svg>
+                  <span>Manufacturing</span>
+                </button>
+                
+                <button
+                  onClick={() => setActiveTagTab('shipping')}
+                  className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 flex items-center space-x-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                  </svg>
+                  <span>Shipping</span>
+                </button>
+                
+                <button
+                  onClick={() => setActiveTagTab('replacements')}
+                  className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 flex items-center space-x-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                  </svg>
+                  <span>Replacements</span>
+                </button>
+              </div>
+
+              {/* Tab Content */}
+              <TagManagementContent 
+                activeTab={activeTagTab} 
+                pets={pets} 
+                token={token} 
+                onUpdate={() => { fetchPets(); fetchStats(); }}
+              />
             </div>
           </div>
         )}
