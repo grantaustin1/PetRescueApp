@@ -328,33 +328,212 @@ class PetTagAPITester:
             return True
         return False
         
-    def test_import_payment_results(self):
-        """Test importing payment results from CSV"""
-        # Create test CSV file
-        test_csv_path = "test_payment_results.csv"
-        with open(test_csv_path, "w", newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(['Customer_ID', 'Status', 'Amount', 'Date'])
-            writer.writerow([self.pet_id, 'success', '2.00', datetime.now().strftime('%Y-%m-%d')])
-        
-        files = {
-            'results_file': ('test_payment_results.csv', open(test_csv_path, 'rb'), 'text/csv')
-        }
-        
+    def test_generate_print_report(self):
+        """Test generating print report PDF"""
+        if not self.pet_id:
+            print("❌ Cannot test print report generation without a pet ID")
+            return False
+            
         success, response = self.run_test(
-            "Import Payment Results",
+            "Generate Print Report",
             "POST",
-            "admin/payments/import-results",
+            "admin/tags/generate-print-report",
             200,
-            files=files,
+            data={"pet_ids": [self.pet_id], "job_name": "Test Print Job"},
             params={"token": self.admin_token}
         )
         
-        # Clean up test CSV
-        os.remove(test_csv_path)
+        if success and response.get('success'):
+            print(f"Generated print report: {response.get('filename')}")
+            print(f"Pet Count: {response.get('pet_count')}")
+            print(f"Download URL: {response.get('download_url')}")
+            return True
+        return False
+        
+    def test_create_manufacturing_batch(self):
+        """Test creating a manufacturing batch"""
+        if not self.pet_id:
+            print("❌ Cannot test manufacturing batch creation without a pet ID")
+            return False
+            
+        # First ensure pet is in 'ordered' status
+        self.run_test(
+            "Reset pet status to ordered",
+            "POST",
+            "admin/tags/update-status",
+            200,
+            data={"pet_id": self.pet_id, "status": "ordered"},
+            params={"token": self.admin_token}
+        )
+        
+        success, response = self.run_test(
+            "Create Manufacturing Batch",
+            "POST",
+            "admin/tags/create-manufacturing-batch",
+            200,
+            data=[self.pet_id],
+            params={"token": self.admin_token, "notes": "Test manufacturing batch"}
+        )
         
         if success and response.get('success'):
-            print(f"Successfully imported payment results: {response.get('message')}")
+            self.manufacturing_batch_id = response.get('batch_id')
+            print(f"Created manufacturing batch: {self.manufacturing_batch_id}")
+            print(f"Pet Count: {response.get('pet_count')}")
+            return True
+        return False
+        
+    def test_get_manufacturing_batches(self):
+        """Test getting manufacturing batches"""
+        success, response = self.run_test(
+            "Get Manufacturing Batches",
+            "GET",
+            "admin/tags/manufacturing-batches",
+            200,
+            params={"token": self.admin_token}
+        )
+        
+        if success and isinstance(response, list):
+            print(f"Retrieved {len(response)} manufacturing batches")
+            return True
+        return False
+        
+    def test_update_manufacturing_batch(self):
+        """Test updating manufacturing batch status"""
+        if not self.manufacturing_batch_id:
+            print("❌ Cannot test batch update without a batch ID")
+            return False
+            
+        success, response = self.run_test(
+            "Update Manufacturing Batch",
+            "POST",
+            "admin/tags/update-manufacturing-batch",
+            200,
+            params={
+                "token": self.admin_token,
+                "batch_id": self.manufacturing_batch_id,
+                "status": "completed",
+                "notes": "Test completion"
+            }
+        )
+        
+        if success and response.get('success'):
+            print(f"Updated manufacturing batch {self.manufacturing_batch_id} to 'completed'")
+            return True
+        return False
+        
+    def test_create_shipping_batch(self):
+        """Test creating a shipping batch"""
+        if not self.pet_id:
+            print("❌ Cannot test shipping batch creation without a pet ID")
+            return False
+            
+        # Ensure pet is in 'manufactured' status
+        self.run_test(
+            "Set pet status to manufactured",
+            "POST",
+            "admin/tags/update-status",
+            200,
+            data={"pet_id": self.pet_id, "status": "manufactured"},
+            params={"token": self.admin_token}
+        )
+        
+        success, response = self.run_test(
+            "Create Shipping Batch",
+            "POST",
+            "admin/tags/create-shipping-batch",
+            200,
+            data=[self.pet_id],
+            params={
+                "token": self.admin_token,
+                "courier": "Test Courier",
+                "tracking_number": "TRACK123456"
+            }
+        )
+        
+        if success and response.get('success'):
+            self.shipping_batch_id = response.get('shipping_id')
+            print(f"Created shipping batch: {self.shipping_batch_id}")
+            print(f"Pet Count: {response.get('pet_count')}")
+            return True
+        return False
+        
+    def test_get_shipping_batches(self):
+        """Test getting shipping batches"""
+        success, response = self.run_test(
+            "Get Shipping Batches",
+            "GET",
+            "admin/tags/shipping-batches",
+            200,
+            params={"token": self.admin_token}
+        )
+        
+        if success and isinstance(response, list):
+            print(f"Retrieved {len(response)} shipping batches")
+            return True
+        return False
+        
+    def test_bulk_update_tag_status(self):
+        """Test bulk updating tag status"""
+        if not self.pet_id:
+            print("❌ Cannot test bulk update without a pet ID")
+            return False
+            
+        success, response = self.run_test(
+            "Bulk Update Tag Status",
+            "POST",
+            "admin/tags/bulk-update",
+            200,
+            data={
+                "pet_ids": [self.pet_id],
+                "new_status": "delivered",
+                "notes": "Test bulk update"
+            },
+            params={"token": self.admin_token}
+        )
+        
+        if success and response.get('success'):
+            print(f"Bulk updated {response.get('updated_count')} pets to 'delivered'")
+            return True
+        return False
+        
+    def test_create_tag_replacement(self):
+        """Test creating a tag replacement"""
+        if not self.pet_id:
+            print("❌ Cannot test tag replacement without a pet ID")
+            return False
+            
+        success, response = self.run_test(
+            "Create Tag Replacement",
+            "POST",
+            "admin/tags/create-replacement",
+            200,
+            params={
+                "token": self.admin_token,
+                "original_pet_id": self.pet_id,
+                "reason": "lost"
+            }
+        )
+        
+        if success and response.get('success'):
+            self.replacement_pet_id = response.get('new_pet_id')
+            print(f"Created tag replacement: {self.replacement_pet_id}")
+            print(f"Original Pet ID: {response.get('original_pet_id')}")
+            print(f"Replacement Fee: R{response.get('replacement_fee')}")
+            return True
+        return False
+        
+    def test_get_tag_replacements(self):
+        """Test getting tag replacements"""
+        success, response = self.run_test(
+            "Get Tag Replacements",
+            "GET",
+            "admin/tags/replacements",
+            200,
+            params={"token": self.admin_token}
+        )
+        
+        if success and isinstance(response, list):
+            print(f"Retrieved {len(response)} tag replacements")
             return True
         return False
 
